@@ -132,8 +132,9 @@ async function start() {
     fitAddon.fit();
   }
 
-  const wsUrl = urlJoin(props.pipingServerUrl, props.csPath.replace(/^http/, 'ws'));
-  const { readable, writable } = new WebSocketStream(wsUrl);
+  const wsUrl = props.pipingServerUrl.replace(/^http/, 'ws');
+  const wss = new WebSocketStream(wsUrl);
+  const { readable, writable } = await wss.opened;
 
   // 创建终端数据流
   const termReadable = new ReadableStream<string>({
@@ -143,26 +144,6 @@ async function start() {
       });
     },
   });
-
-  // 管道连接终端输入到 WebSocket
-  termReadable.pipeTo(writable).catch(err => {
-    console.error("WebSocket write error:", err);
-  });
-
-  // 创建 WebSocket 读取器并处理接收到的数据
-  const reader = readable.getReader();
-  const readLoop = async () => {
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        term.write(value);
-      }
-    } catch (err) {
-      console.error("WebSocket read error:", err);
-    }
-  };
-  readLoop();
 
   window.addEventListener("beforeunload", () => {
     messageChannel.port1.postMessage({
@@ -174,6 +155,8 @@ async function start() {
   try {
     let passwordTried = false;
     const transfers: Transferable[] = [
+      readable,
+      writable,
       termReadable,
       messageChannel.port2
     ];
