@@ -136,22 +136,19 @@ async function start() {
   const wss = new WebSocketStream(wsUrl);
   const { readable, writable } = await wss.opened;
 
-  // 创建终端数据流
   const termReadable = new ReadableStream<string>({
+    // NOTE: listener registration in Worker using Comlink does not work
     start(ctrl) {
       term.onData((data: string) => {
         ctrl.enqueue(data);
       });
     },
   });
-
-  window.addEventListener("beforeunload", () => {
+  window.addEventListener("beforeunload", () =>{
     messageChannel.port1.postMessage({
       type: "disconnect",
     });
-    reader.cancel();
   });
-
   try {
     let passwordTried = false;
     const transfers: Transferable[] = [
@@ -176,6 +173,7 @@ async function start() {
         term.write(data);
       },
       async onPasswordAuth(): Promise<string> {
+        // NOTE: Keep support empty password
         if (!passwordTried && props.defaultSshPassword !== undefined) {
           passwordTried = true;
           return props.defaultSshPassword;
@@ -237,6 +235,7 @@ async function start() {
       emit('end');
       return;
     }
+    // TODO: better handling
     console.error("SSH error", e);
     alert(`SSH error: ${e}`);
     emit('end');
