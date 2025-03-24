@@ -27,7 +27,7 @@ const emit = defineEmits<{
   (event: 'save', authKeySet: AuthKeySet): void
 }>();
 
-const keyTypeCandidates = ["RSA", "Ed25519"] as const;
+const keyTypeCandidates = ["Ed25519", "RSA"] as const;
 const keyType = ref<(typeof keyTypeCandidates)[number]>(keyTypeCandidates[0]);
 
 const keyBitCandidates = [2048, 4096] as const;
