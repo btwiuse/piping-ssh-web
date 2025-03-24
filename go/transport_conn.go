@@ -37,12 +37,8 @@ func (d *TransportConn) Read(p []byte) (int, error) {
 		if done {
 			break
 		}
-		println("typeof result: ", result.Type().String())
-		println("typeof result.value: ", result.Get("value").Type().String())
-		js.Global().Get("console").Call("log", result.Get("value"))
-		v2 := js.Global().Get("Uint8Array").New(result.Get("value"))
-		js.Global().Get("console").Call("log", v2)
-		value := jsutil.Uint8ArrayToBytes(v2)
+		valueU8a := js.Global().Get("Uint8Array").New(result.Get("value"))
+		value := jsutil.Uint8ArrayToBytes(valueU8a)
 		d.readBuffer.Write(value)
 	}
 	return d.readBuffer.Read(p)
