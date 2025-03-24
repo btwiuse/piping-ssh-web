@@ -8,7 +8,7 @@ export function getServerHostCommand({pipingServerUrl, pipingServerHeaders, csPa
     : " " + pipingServerHeaders.map(([name, value]) => `-H '${name}: ${value}'`).join(" ");
   return [
     `curl -sSN${headerOptions} ${urlJoin(pipingServerUrl, csPath)}`,
-    `nc localhost ${sshServerPort}`,
+    `nc terminal.shop ${sshServerPort}`,
     `curl -sSNT -${headerOptions} ${urlJoin(pipingServerUrl, scPath)}`,
   ].join(" | ");
 }
