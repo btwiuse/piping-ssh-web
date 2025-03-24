@@ -8,7 +8,8 @@
     "patch-golang-crypto": "(cd go/golang-crypto && patch -p1 -N < ../golang-crypto.patch || true)",
     "build-wasm": "go env -w GOTOOLCHAIN=go1.24.1 && (cd go && GOOS=js GOARCH=wasm go build -o ../public/main.wasm) && cp \"$(go env GOROOT)/lib/wasm/wasm_exec.js\" ./public",
     "build-wasm-watch": "watch 'npm run build-wasm' go",
-    "build": "npm run patch-golang-crypto && npm run build-wasm && vue-cli-service build"
+    "build-all": "npm run patch-golang-crypto && npm run build-wasm && vue-cli-service build",
+    "build": "vue-cli-service build"
   },
   "repository": {
     "type": "git",
