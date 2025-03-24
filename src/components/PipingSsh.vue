@@ -132,63 +132,56 @@ async function start() {
     fitAddon.fit();
   }
 
-  const {readable: sendReadable, writable: sendWritable} = new TransformStream();
-  const csUrl = urlJoin(props.pipingServerUrl, props.csPath);
-  const scUrl = urlJoin(props.pipingServerUrl, props.scPath);
-  const pipingServerHeaders = new Headers(props.pipingServerHeaders);
-  // TODO: retry connection
-  fetch(csUrl, {
-    method: "POST",
-    headers: pipingServerHeaders,
-    body: sendReadable,
-    duplex: 'half',
-  } as any).then(postRes => {
-    console.log("postRes", postRes);
-  });
-  const getRes = await fetch(scUrl, {
-    headers: pipingServerHeaders,
-  });
-  // TODO: status check
-  const transport = {
-    readable: getRes.body!,
-    writable: sendWritable,
-  };
-  const originalTermWrite = term.write;
-  // For fitting terminal
-  term.write = (...args: any) => {
-    originalTermWrite.apply(term, args);
-    // Restore original .write()
-    term.write = originalTermWrite;
-    term.focus();
-    // FIXME: fitting several times solves the fitting problem in the first session
-    fitTerminal();
-    fitTerminal();
-    fitTerminal();
-    fitTerminal();
-  };
+  const wsUrl = urlJoin(props.pipingServerUrl, props.csPath.replace(/^http/, 'ws'));
+  const { readable, writable } = new WebSocketStream(wsUrl);
+
+  // 创建终端数据流
   const termReadable = new ReadableStream<string>({
     start(ctrl) {
-      // NOTE: listener registration in Worker using Comlink does not work
       term.onData((data: string) => {
         ctrl.enqueue(data);
       });
     },
   });
-  window.addEventListener("beforeunload", () =>{
+
+  // 管道连接终端输入到 WebSocket
+  termReadable.pipeTo(writable).catch(err => {
+    console.error("WebSocket write error:", err);
+  });
+
+  // 创建 WebSocket 读取器并处理接收到的数据
+  const reader = readable.getReader();
+  const readLoop = async () => {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        term.write(value);
+      }
+    } catch (err) {
+      console.error("WebSocket read error:", err);
+    }
+  };
+  readLoop();
+
+  window.addEventListener("beforeunload", () => {
     messageChannel.port1.postMessage({
       type: "disconnect",
     });
+    reader.cancel();
   });
+
   try {
     let passwordTried = false;
     const transfers: Transferable[] = [
-      transport.readable,
-      transport.writable,
       termReadable,
       messageChannel.port2
     ];
     await (await aliveGoWasmWorkerRemotePromise()).doSsh(Comlink.transfer({
-      transport,
+      transport: {
+        readable,
+        writable,
+      },
       termReadable,
       initialRows: term.rows,
       initialCols: term.cols,
@@ -200,7 +193,6 @@ async function start() {
         term.write(data);
       },
       async onPasswordAuth(): Promise<string> {
-        // NOTE: Keep support empty password
         if (!passwordTried && props.defaultSshPassword !== undefined) {
           passwordTried = true;
           return props.defaultSshPassword;
@@ -262,7 +254,6 @@ async function start() {
       emit('end');
       return;
     }
-    // TODO: better handling
     console.error("SSH error", e);
     alert(`SSH error: ${e}`);
     emit('end');
