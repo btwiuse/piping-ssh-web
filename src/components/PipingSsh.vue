@@ -132,13 +132,23 @@ async function start() {
     fitAddon.fit();
   }
 
-  const wsUrl = props.pipingServerUrl.replace(/^http/, 'ws');
-  const wss = new WebSocketStream(wsUrl);
-  const { readable, writable } = await wss.opened;
-
+  const transport = await new WebSocketStream(props.pipingServerUrl).opened;
+  const originalTermWrite = term.write;
+  // For fitting terminal
+  term.write = (...args: any) => {
+    originalTermWrite.apply(term, args);
+    // Restore original .write()
+    term.write = originalTermWrite;
+    term.focus();
+    // FIXME: fitting several times solves the fitting problem in the first session
+    fitTerminal();
+    fitTerminal();
+    fitTerminal();
+    fitTerminal();
+  };
   const termReadable = new ReadableStream<string>({
-    // NOTE: listener registration in Worker using Comlink does not work
     start(ctrl) {
+      // NOTE: listener registration in Worker using Comlink does not work
       term.onData((data: string) => {
         ctrl.enqueue(data);
       });
@@ -152,16 +162,13 @@ async function start() {
   try {
     let passwordTried = false;
     const transfers: Transferable[] = [
-      readable,
-      writable,
+      transport.readable,
+      transport.writable,
       termReadable,
       messageChannel.port2
     ];
     await (await aliveGoWasmWorkerRemotePromise()).doSsh(Comlink.transfer({
-      transport: {
-        readable,
-        writable,
-      },
+      transport,
       termReadable,
       initialRows: term.rows,
       initialCols: term.cols,
