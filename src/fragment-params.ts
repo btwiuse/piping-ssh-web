@@ -5,11 +5,10 @@ const headersType = z.array(z.tuple([z.string(), z.string()]));
 const paramNames = {
   pipingServerUrl: "server",
   pipingServerHeaders: "headers",
-  csPath: "cs_path",
-  scPath: "sc_path",
+  sshHost: "host",
+  sshPort: "port",
   sshUsername: "user",
   sshPassword: "password",
-  sshServerPortForHint: "s_port",
   autoConnect: "auto_connect",
 };
 
@@ -34,20 +33,17 @@ export const fragmentParams = {
     }
     return parsed.data;
   },
-  csPath(): string | undefined {
-    return parseFragmentParams().get(paramNames.csPath) ?? undefined;
+  sshHost(): string | undefined {
+    return parseFragmentParams().get(paramNames.sshHost) ?? undefined;
   },
-  scPath(): string | undefined {
-    return parseFragmentParams().get(paramNames.scPath) ?? undefined;
+  sshPort(): string | undefined {
+    return parseFragmentParams().get(paramNames.sshPort) ?? undefined;
   },
   sshUsername(): string | undefined {
     return parseFragmentParams().get(paramNames.sshUsername) ?? undefined;
   },
   sshPassword(): string | undefined {
     return parseFragmentParams().get(paramNames.sshPassword) ?? undefined;
-  },
-  sshServerPortForHint(): string | undefined {
-    return parseFragmentParams().get(paramNames.sshServerPortForHint) ?? undefined;
   },
   autoConnect(): boolean | undefined {
     const str = parseFragmentParams().get(paramNames.autoConnect);
@@ -57,7 +53,7 @@ export const fragmentParams = {
 
 type SetFragmentParams = { [K in keyof (typeof fragmentParams) ]: ReturnType<(typeof fragmentParams)[K]> }
 
-export function getConfiguredUrl({ pipingServerUrl, pipingServerHeaders, csPath, scPath, sshUsername, sshPassword, sshServerPortForHint, autoConnect }: SetFragmentParams): string {
+export function getConfiguredUrl({ pipingServerUrl, pipingServerHeaders, sshHost, sshPort, sshUsername, sshPassword, autoConnect }: SetFragmentParams): string {
   const searchParams = new URLSearchParams();
   if (pipingServerUrl !== undefined) {
     searchParams.set(paramNames.pipingServerUrl, pipingServerUrl);
@@ -65,20 +61,17 @@ export function getConfiguredUrl({ pipingServerUrl, pipingServerHeaders, csPath,
   if (pipingServerHeaders !== undefined && pipingServerHeaders.length !== 0) {
     searchParams.set(paramNames.pipingServerHeaders, JSON.stringify(pipingServerHeaders));
   }
-  if (csPath !== undefined) {
-    searchParams.set(paramNames.csPath, csPath);
+  if (sshHost !== undefined) {
+    searchParams.set(paramNames.sshHost, sshHost);
   }
-  if (scPath !== undefined) {
-    searchParams.set(paramNames.scPath, scPath);
+  if (sshPort !== undefined && sshPort !== "") {
+    searchParams.set(paramNames.sshPort, sshPort);
   }
   if (sshUsername !== undefined) {
     searchParams.set(paramNames.sshUsername, sshUsername);
   }
   if (sshPassword !== undefined) {
     searchParams.set(paramNames.sshPassword, sshPassword);
-  }
-  if (sshServerPortForHint !== undefined && sshServerPortForHint !== "") {
-    searchParams.set(paramNames.sshServerPortForHint, sshServerPortForHint);
   }
   if (autoConnect !== undefined && autoConnect) {
     searchParams.set(paramNames.autoConnect, "1");

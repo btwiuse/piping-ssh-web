@@ -35,10 +35,18 @@
 
             <v-sheet min-height="70vh" rounded="lg" style="padding: 1rem">
               <v-form @submit.prevent="connect" v-model="formValid" :disabled="!supportsRequestStreams">
-                <v-combobox label="Piping Server" v-model="pipingServerUrl" :items="pipingServerUrls" required variant="solo-filled" :rules="createRequiredRules('Piping Server')"></v-combobox>
+                <v-row>
+                  <v-col>
+                    <v-text-field label="SSH server host" v-model="sshHost" required variant="solo-filled" :rules="createRequiredRules('SSH server host')"></v-text-field>
+                  </v-col>
+                  <v-col>
+                    <v-text-field label="SSH server port" v-model="sshPort" required variant="solo-filled" :rules="createRequiredRules('SSH server port')"></v-text-field>
+                  </v-col>
+                </v-row>
                 <v-text-field label="user name" v-model="username" required variant="solo-filled" :rules="createRequiredRules('user name')"></v-text-field>
 
                 <template v-if="showsMoreOptions">
+                  <v-combobox label="Piping Server" v-model="pipingServerUrl" :items="pipingServerUrls" required variant="solo-filled" :rules="createRequiredRules('Piping Server')"></v-combobox>
                   <!-- HTTP header inputs -->
                   <v-row v-for="(header, idx) in editingPipingServerHeaders">
                     <v-col>
@@ -55,7 +63,6 @@
                     Add header
                   </v-btn>
 
-                  <v-text-field v-model="sshServerPortForCommandHint" label="SSH server port for command" variant="solo-filled"></v-text-field>
                   <v-text-field v-model="editingSshPassword" label="SSH password" :type="showsSshPassword ? 'text' : 'password'" variant="solo-filled">
                     <template v-slot:append-inner>
                       <v-btn @click="showsSshPassword = !showsSshPassword" :icon="showsSshPassword ? mdiEyeOff : mdiEye" variant="text"></v-btn>
@@ -75,13 +82,6 @@
                 </v-btn>
               </v-form>
 
-              <v-spacer style="margin-top: 4rem;"/>
-              <v-textarea label="server-host command" v-model="serverHostCommandEditing" variant="outlined" rows="2" class="text-grey">
-                <template v-slot:append-inner>
-                  <CopyToClipboardButton :text="serverHostCommandEditing"/>
-                </template>
-              </v-textarea>
-
               <v-btn color="grey" @click="setConfiguredUrl()" :prepend-icon="mdiFire" variant="outlined" style="text-transform: none">
                 Set configured URL
               </v-btn>
@@ -91,7 +91,7 @@
       </v-container>
 
       <PipingSsh v-if="connecting"
-                 :piping-server-url="pipingServerUrl"
+                 :piping-server-url="pipingFullUrl"
                  :piping-server-headers="pipingServerHeaders"
                  :default-ssh-password="sshPassword"
                  :username="username"
@@ -153,12 +153,10 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref, defineAsyncComponent, watch} from "vue";
+import {computed, onMounted, ref, defineAsyncComponent} from "vue";
 import {fragmentParams, getConfiguredUrl} from "@/fragment-params";
 import {mdiConsoleLine, mdiKey, mdiPlus, mdiAutoFix, mdiGithub, mdiClose, mdiFire, mdiCollapseAll, mdiExpandAll, mdiMinus, mdiEyeOff, mdiEye, mdiAlertCircle} from "@mdi/js";
 import {AuthKeySet, storeAuthKeySet} from "@/authKeySets";
-import {getServerHostCommand} from "@/getServerHostCommand";
-import CopyToClipboardButton from "@/components/CopyToClipboardButton.vue";
 import {createRequiredRules} from "@/createRequiredRules";
 import DialogsForGlobal from "@/components/Globals/Globals.vue";
 import {showSnackbar} from "@/components/Globals/snackbar/global-snackbar";
@@ -172,19 +170,18 @@ const KeyGenerator = defineAsyncComponent(() => import("@/components/KeyGenerato
 const supportsRequestStreams = ref(true /* There are many Chromium-based browser users for now */);
 supportsRequestStreamsPromise.then(supports => supportsRequestStreams.value = supports);
 
-const demoUrl = "https://websocket-tcp-proxy.navigaid.workers.dev/terminal.shop:22"
-const pipingServerUrl = ref<string>(fragmentParams.pipingServerUrl() ?? demoUrl);
+const demoBaseUrl = "https://websocket-tcp-proxy.navigaid.workers.dev/"
+const pipingServerUrl = ref<string>(fragmentParams.pipingServerUrl() ?? demoBaseUrl);
 const pipingServerUrls = ref<string[]>([
-  demoUrl,
+  demoBaseUrl,
 ]);
 const editingPipingServerHeaders = ref<Array<[string, string]>>(fragmentParams.pipingServerHeaders() ?? []);
 const pipingServerHeaders = computed<Array<[string, string]>>(() => {
   return editingPipingServerHeaders.value.filter(([name,value]) => name !== "");
 });
-const csPath = ref<string>(fragmentParams.csPath() ?? randomString(4));
-const scPath = ref<string>(fragmentParams.scPath() ?? randomString(4));
+const sshHost = ref<string>(fragmentParams.sshHost() ?? "terminal.shop");
+const sshPort = ref<string>(fragmentParams.sshPort() ?? "22");
 const username = ref<string>(fragmentParams.sshUsername() ?? "");
-const sshServerPortForCommandHint = ref<string>(fragmentParams.sshServerPortForHint() ?? "22");
 
 const editingSshPassword = ref<string>(fragmentParams.sshPassword() ?? "");
 const showsSshPassword = ref(false);
@@ -198,6 +195,10 @@ const sshPassword = computed<string | undefined>(() => {
 
 const includesSshPasswordInFragmentParams = ref<boolean>(fragmentParams.sshPassword() !== undefined);
 const autoConnectForFragmentParams = ref<boolean>(fragmentParams.autoConnect() ?? false);
+
+const pipingFullUrl = computed<string>(() => {
+  return `${pipingServerUrl.value}${sshHost.value}:${sshPort.value}`;
+});
 
 const formValid = ref(false);
 const connecting = ref<boolean>(false);
@@ -230,44 +231,20 @@ function preloadForUserExperience() {
   import("@/components/KeyGenerator.vue");
 }
 
-const serverHostCommandEditing = ref<string>("");
-const serverHostCommand = computed<string>(() => {
-  return getServerHostCommand({
-    // NOTE: v-combobox makes pipingServerUrl null
-    pipingServerUrl: pipingServerUrl.value ?? "",
-    pipingServerHeaders: pipingServerHeaders.value,
-    csPath: csPath.value,
-    scPath: scPath.value,
-    sshServerPort: sshServerPortForCommandHint.value,
-  });
-});
-watch(serverHostCommand, () => {
-  serverHostCommandEditing.value = serverHostCommand.value;
-}, {
-  immediate: true,
-});
-
 async function saveAuthKeySet(authKeySet: AuthKeySet) {
   newKeyDialog.value = false;
   generateKeyDialog.value = false;
   await storeAuthKeySet(authKeySet);
 }
 
-function randomString(len){
-  const nonConfusingChars = ["a", "b", "c", "d", "e", "f", "h", "i", "j", "k", "m", "n", "p", "r", "s", "t", "u", "v", "w", "x", "y", "z", "2", "3", "4", "5", "6", "7", "8"];
-  const randomArr = window.crypto.getRandomValues(new Uint32Array(len));
-  return Array.from(randomArr).map(n => nonConfusingChars[n % nonConfusingChars.length]).join('');
-}
-
 function setConfiguredUrl() {
   location.href = getConfiguredUrl({
     pipingServerUrl: pipingServerUrl.value,
     pipingServerHeaders: pipingServerHeaders.value,
-    csPath: csPath.value,
-    scPath: scPath.value,
+    sshHost: sshHost.value,
+    sshPort: sshPort.value,
     sshUsername: username.value,
     sshPassword: includesSshPasswordInFragmentParams.value ? sshPassword.value : undefined,
-    sshServerPortForHint: sshServerPortForCommandHint.value,
     autoConnect: autoConnectForFragmentParams.value,
   });
   showSnackbar({
