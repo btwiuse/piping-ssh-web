@@ -43,14 +43,14 @@
                     <v-text-field label="SSH server port" v-model="sshPort" required variant="solo-filled" :rules="createRequiredRules('SSH server port')"></v-text-field>
                   </v-col>
                 </v-row>
-                <v-text-field label="user name" v-model="username" required variant="solo-filled" :rules="createRequiredRules('user name')"></v-text-field>
+                <v-text-field class="mb-4" label="user name" v-model="username" required variant="solo-filled" :rules="createRequiredRules('user name')"></v-text-field>
 
-                <v-btn type="submit" :disabled="!formValid || !supportsRequestStreams" block class="mt-8" color="secondary">
+                <v-btn type="submit" :disabled="!formValid || !supportsRequestStreams" block color="secondary">
                   Connect
                 </v-btn>
 
                 <template v-if="showsMoreOptions">
-                  <v-combobox label="Piping Server" v-model="pipingServerUrl" :items="pipingServerUrls" required variant="solo-filled" :rules="createRequiredRules('Piping Server')"></v-combobox>
+                  <v-combobox class="mt-4" label="Piping Server" v-model="pipingServerUrl" :items="pipingServerUrls" required variant="solo-filled" :rules="createRequiredRules('Piping Server')"></v-combobox>
 
                   <v-text-field v-model="editingSshPassword" label="SSH password" :type="showsSshPassword ? 'text' : 'password'" variant="solo-filled">
                     <template v-slot:append-inner>
