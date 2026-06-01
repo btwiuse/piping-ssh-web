@@ -919,7 +919,7 @@ function App() {
 
                 <!-- username @ host : port -->
                 <div class="flex gap-0 items-center">
-                  <div class="flex-1" style=${{ minWidth: 0 }}>
+                  <div class="w-28" style=${{ flexShrink: 0 }}>
                     <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
                       placeholder="username"
                       disabled=${!supportsStreams} class=${inputClass} />
