@@ -12,30 +12,14 @@ const html = htm.bind(h);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function urlJoin(base, ...parts) {
-  let result = base.replace(/\/+$/, '');
-  for (const p of parts) {
-    result += '/' + String(p).replace(/^\/+/, '');
-  }
-  return result;
-}
-
-function randomString(len) {
-  const chars = 'abcdefhijkmnprstuvwxyz234568'.split('');
-  const arr = window.crypto.getRandomValues(new Uint32Array(len));
-  return Array.from(arr, n => chars[n % chars.length]).join('');
-}
-
 // ─── Fragment params ──────────────────────────────────────────────────────────
 
 const P = {
   pipingServerUrl:      'server',
-  pipingServerHeaders:  'headers',
-  csPath:               'cs_path',
-  scPath:               'sc_path',
+  sshHost:              'host',
+  sshPort:              'port',
   sshUsername:          'user',
   sshPassword:          'password',
-  sshServerPortForHint: 's_port',
   autoConnect:          'auto_connect',
 };
 
@@ -45,35 +29,23 @@ function parseFragmentParams() {
 
 const fragmentParams = {
   pipingServerUrl()      { return parseFragmentParams().get(P.pipingServerUrl) ?? undefined; },
-  pipingServerHeaders()  {
-    const s = parseFragmentParams().get(P.pipingServerHeaders);
-    if (!s) return undefined;
-    try {
-      const d = JSON.parse(decodeURIComponent(s));
-      if (Array.isArray(d) && d.every(h => Array.isArray(h) && h.length === 2)) return d;
-    } catch (_) { /* ignore */ }
-    return undefined;
-  },
-  csPath()               { return parseFragmentParams().get(P.csPath) ?? undefined; },
-  scPath()               { return parseFragmentParams().get(P.scPath) ?? undefined; },
+  sshHost()              { return parseFragmentParams().get(P.sshHost) ?? undefined; },
+  sshPort()              { return parseFragmentParams().get(P.sshPort) ?? undefined; },
   sshUsername()          { return parseFragmentParams().get(P.sshUsername) ?? undefined; },
   sshPassword()          { return parseFragmentParams().get(P.sshPassword) ?? undefined; },
-  sshServerPortForHint() { return parseFragmentParams().get(P.sshServerPortForHint) ?? undefined; },
   autoConnect()          {
     const s = parseFragmentParams().get(P.autoConnect);
     return s !== null && ['', '1', 'true'].includes(s);
   },
 };
 
-function getConfiguredUrl({ pipingServerUrl, pipingServerHeaders, csPath, scPath, sshUsername, sshPassword, sshServerPortForHint, autoConnect }) {
+function getConfiguredUrl({ pipingServerUrl, sshHost, sshPort, sshUsername, sshPassword, autoConnect }) {
   const sp = new URLSearchParams();
   if (pipingServerUrl)                           sp.set(P.pipingServerUrl, pipingServerUrl);
-  if (pipingServerHeaders?.length)               sp.set(P.pipingServerHeaders, JSON.stringify(pipingServerHeaders));
-  if (csPath)                                    sp.set(P.csPath, csPath);
-  if (scPath)                                    sp.set(P.scPath, scPath);
+  if (sshHost)                                   sp.set(P.sshHost, sshHost);
+  if (sshPort && sshPort !== '')                 sp.set(P.sshPort, sshPort);
   if (sshUsername)                               sp.set(P.sshUsername, sshUsername);
   if (sshPassword !== undefined)                 sp.set(P.sshPassword, sshPassword);
-  if (sshServerPortForHint)                      sp.set(P.sshServerPortForHint, sshServerPortForHint);
   if (autoConnect)                               sp.set(P.autoConnect, '1');
   const url = new URL(location.href);
   url.hash = `?${sp.toString()}`;
@@ -145,19 +117,6 @@ const serverHostKeyMgr = {
   isTrusted(fp) { return this._get().includes(fp); },
   _get() { try { return JSON.parse(localStorage.getItem('known_host_key_fingerprints') || '[]'); } catch { return []; } },
 };
-
-// ─── Server host command ──────────────────────────────────────────────────────
-
-function getServerHostCommand({ pipingServerUrl, pipingServerHeaders = [], csPath, scPath, sshServerPort }) {
-  const ho = pipingServerHeaders.length === 0
-    ? ''
-    : ' ' + pipingServerHeaders.map(([n, v]) => `-H '${n}: ${v}'`).join(' ');
-  return [
-    `curl -sSN${ho} ${urlJoin(pipingServerUrl, csPath)}`,
-    `nc terminal.shop ${sshServerPort}`,
-    `curl -sSNT -${ho} ${urlJoin(pipingServerUrl, scPath)}`,
-  ].join(' | ');
-}
 
 // ─── Worker management ────────────────────────────────────────────────────────
 
@@ -333,13 +292,9 @@ function CopyButton({ text }) {
 
 // ─── PipingSsh (terminal view) ────────────────────────────────────────────────
 
-function PipingSsh({ pipingServerUrl, pipingServerHeaders, csPath, scPath, username, defaultSshPassword, onEnd }) {
+function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
   const termRef  = useRef(null);
   const [connState, setConnState] = useState('connecting');
-  const hostCmd  = useMemo(() => getServerHostCommand({
-    pipingServerUrl, pipingServerHeaders, csPath, scPath,
-    sshServerPort: fragmentParams.sshServerPortForHint() ?? 22,
-  }), []);
 
   useEffect(() => {
     let localCancelled = false;
@@ -364,29 +319,8 @@ function PipingSsh({ pipingServerUrl, pipingServerHeaders, csPath, scPath, usern
       };
       window.addEventListener('resize', fit);
 
-      // Piping server streams
-      const { readable: sendReadable, writable: sendWritable } = new TransformStream();
-      const csUrl  = urlJoin(pipingServerUrl, csPath);
-      const scUrl  = urlJoin(pipingServerUrl, scPath);
-      const hdrs   = new Headers(pipingServerHeaders);
-
-      fetch(csUrl, { method: 'POST', headers: hdrs, body: sendReadable, duplex: 'half' });
-      const getRes = await fetch(scUrl, { headers: hdrs });
-
-      const transport = { readable: getRes.body, writable: sendWritable };
-
-      // Wrap term.write so that the first actual data triggers a fit
-      const origWrite = term.write.bind(term);
-      let fittedOnce  = false;
-      term.write = (...a) => {
-        origWrite(...a);
-        if (!fittedOnce) {
-          fittedOnce = true;
-          term.write  = origWrite;
-          term.focus();
-          fit(); fit(); fit(); fit();
-        }
-      };
+      // WebSocketStream transport
+      const transport = await new WebSocketStream(pipingServerUrl).opened;
 
       const termReadable = new ReadableStream({ start(ctrl) { term.onData(d => ctrl.enqueue(d)); } });
       window.addEventListener('beforeunload', () => mc.port1.postMessage({ type: 'disconnect' }));
@@ -459,7 +393,13 @@ function PipingSsh({ pipingServerUrl, pipingServerHeaders, csPath, scPath, usern
               return false;
             },
 
-            onConnected() { setConnState('connected'); },
+            onConnected() {
+              setConnState('connected');
+              setTimeout(() => {
+                fit();
+                term.focus();
+              }, 0);
+            },
           }),
         );
 
@@ -483,17 +423,6 @@ function PipingSsh({ pipingServerUrl, pipingServerHeaders, csPath, scPath, usern
             <div class="absolute inset-0 rounded-full border-2 border-t-blue-400 animate-spin"></div>
           </div>
           <p class="text-gray-400">Connecting...</p>
-          <div class="relative w-full max-w-2xl px-4">
-            <div class="relative">
-              <textarea value=${hostCmd} readOnly rows="2"
-                class="w-full bg-gray-800 text-gray-400 border border-gray-700 rounded p-3 pr-10 font-mono text-sm resize-none"
-              ></textarea>
-              <div class="absolute top-2 right-2">
-                <${CopyButton} text=${hostCmd} />
-              </div>
-            </div>
-            <p class="text-gray-500 text-xs mt-1">server-host command</p>
-          </div>
         </div>
       `}
       <div ref=${termRef}
@@ -862,18 +791,18 @@ function Dialog({ title, open, onClose, children, wide = false }) {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
+const demoBaseUrl = 'https://websocket-tcp-proxy.navigaid.workers.dev/';
+
 function App() {
-  const [pipingServerUrl,   setPipingServerUrl]   = useState(fragmentParams.pipingServerUrl() ?? 'https://ppng.io');
-  const [editingHeaders,    setEditingHeaders]    = useState(fragmentParams.pipingServerHeaders() ?? []);
-  const [csPath,            setCsPath]            = useState(fragmentParams.csPath() ?? randomString(4));
-  const [scPath,            setScPath]            = useState(fragmentParams.scPath() ?? randomString(4));
+  const [pipingServerUrl,   setPipingServerUrl]   = useState(fragmentParams.pipingServerUrl() ?? demoBaseUrl);
+  const [sshHost,           setSshHost]           = useState(fragmentParams.sshHost() ?? 'terminal.shop');
+  const [sshPort,           setSshPort]           = useState(fragmentParams.sshPort() ?? '22');
   const [username,          setUsername]          = useState(fragmentParams.sshUsername() ?? '');
   const [sshPassword,       setSshPassword]       = useState(fragmentParams.sshPassword() ?? '');
   const [showSshPw,         setShowSshPw]         = useState(false);
   const [emptySshPw,        setEmptySshPw]        = useState(fragmentParams.sshPassword() === '');
   const [inclPwInUrl,       setInclPwInUrl]       = useState(fragmentParams.sshPassword() !== undefined);
   const [autoConnect,       setAutoConnect]       = useState(fragmentParams.autoConnect() ?? false);
-  const [sshPortHint,       setSshPortHint]       = useState(fragmentParams.sshServerPortForHint() ?? '22');
   const [showMore,          setShowMore]          = useState(false);
   const [connecting,        setConnecting]        = useState(false);
   const [supportsStreams,   setSupportsStreams]   = useState(true);
@@ -884,19 +813,13 @@ function App() {
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
 
-  // Active headers (non-empty names)
-  const activeHeaders = editingHeaders.filter(([n]) => n !== '');
-
-  // Server host command (live)
-  const serverHostCmd = useMemo(() => getServerHostCommand({
-    pipingServerUrl: pipingServerUrl ?? '',
-    pipingServerHeaders: activeHeaders,
-    csPath, scPath,
-    sshServerPort: sshPortHint || '22',
-  }), [pipingServerUrl, activeHeaders, csPath, scPath, sshPortHint]);
-
-  const [serverHostCmdEdit, setServerHostCmdEdit] = useState(serverHostCmd);
-  useEffect(() => { setServerHostCmdEdit(serverHostCmd); }, [serverHostCmd]);
+  // Full URL with host/port as query params
+  const pipingFullUrl = useMemo(() => {
+    const url = new URL(pipingServerUrl);
+    url.searchParams.set('hostname', sshHost);
+    url.searchParams.set('port', sshPort);
+    return url.href;
+  }, [pipingServerUrl, sshHost, sshPort]);
 
   useEffect(() => {
     checkSupportsRequestStreams().then(s => setSupportsStreams(s));
@@ -909,7 +832,7 @@ function App() {
   function connect() { setConnecting(true); }
 
   function formValid() {
-    return !!(pipingServerUrl && csPath && scPath && username);
+    return !!(pipingServerUrl && sshHost && sshPort && username);
   }
 
   async function handleSaveKey(authKeySet) {
@@ -921,10 +844,8 @@ function App() {
 
   function setConfiguredUrl() {
     location.href = getConfiguredUrl({
-      pipingServerUrl, pipingServerHeaders: activeHeaders,
-      csPath, scPath, sshUsername: username,
+      pipingServerUrl, sshHost, sshPort, sshUsername: username,
       sshPassword: inclPwInUrl ? effectiveSshPassword : undefined,
-      sshServerPortForHint: sshPortHint,
       autoConnect,
     });
     showSnackbar({ message: 'URL updated' });
@@ -964,10 +885,7 @@ function App() {
       <main class="flex-1 flex flex-col">
         ${connecting
           ? html`<${PipingSsh}
-              pipingServerUrl=${pipingServerUrl}
-              pipingServerHeaders=${activeHeaders}
-              csPath=${csPath}
-              scPath=${scPath}
+              pipingServerUrl=${pipingFullUrl}
               username=${username}
               defaultSshPassword=${effectiveSshPassword}
               onEnd=${() => setConnecting(false)}
@@ -983,143 +901,104 @@ function App() {
                 </div>
               `}
 
-              <div class="bg-gray-800 rounded-lg p-6 space-y-4" style=${{ minHeight: '70vh' }}>
+              <div class="bg-gray-800 rounded-lg p-6" style=${{ minHeight: '70vh' }}>
+                <form onSubmit=${e => { e.preventDefault(); connect(); }}>
 
-                <!-- Piping Server URL -->
-                <div>
-                  <label class="block text-sm text-gray-400 mb-1">Piping Server</label>
-                  <input list="piping-servers" value=${pipingServerUrl}
-                    onInput=${e => setPipingServerUrl(e.target.value)}
-                    required disabled=${!supportsStreams}
-                    class=${inputClass} placeholder="https://ppng.io" />
-                  <datalist id="piping-servers">
-                    <option value="https://ppng.io"/>
-                    <option value="https://piping.nwtgck.repl.co"/>
-                  </datalist>
-                </div>
+                  <!-- ssh-host / ssh-port -->
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-sm text-gray-400 mb-1">SSH server host</label>
+                      <input value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
+                        disabled=${!supportsStreams} class=${inputClass} />
+                    </div>
+                    <div>
+                      <label class="block text-sm text-gray-400 mb-1">SSH server port</label>
+                      <input value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
+                        disabled=${!supportsStreams} class=${inputClass} />
+                    </div>
+                  </div>
 
-                <!-- cs-path / sc-path -->
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-sm text-gray-400 mb-1">client-server path</label>
-                    <input value=${csPath} onInput=${e => setCsPath(e.target.value)} required
+                  <!-- Username -->
+                  <div class="mb-4">
+                    <label class="block text-sm text-gray-400 mb-1">user name</label>
+                    <input value=${username} onInput=${e => setUsername(e.target.value)} required
                       disabled=${!supportsStreams} class=${inputClass} />
                   </div>
-                  <div>
-                    <label class="block text-sm text-gray-400 mb-1">server-client path</label>
-                    <input value=${scPath} onInput=${e => setScPath(e.target.value)} required
-                      disabled=${!supportsStreams} class=${inputClass} />
-                  </div>
-                </div>
 
-                <!-- Username -->
-                <div>
-                  <label class="block text-sm text-gray-400 mb-1">user name</label>
-                  <input value=${username} onInput=${e => setUsername(e.target.value)} required
-                    disabled=${!supportsStreams} class=${inputClass} />
-                </div>
+                  <!-- Connect button -->
+                  <button type="submit"
+                    disabled=${!formValid() || !supportsStreams}
+                    class="w-full py-2.5 bg-gray-600 hover:bg-gray-500 disabled:opacity-40 rounded text-white font-medium transition-colors">
+                    Connect
+                  </button>
 
-                <!-- More options (collapsible) -->
-                ${showMore && html`
-                  <div class="space-y-4 pt-2">
+                  <!-- More options (collapsible) -->
+                  ${showMore && html`
+                    <div class="space-y-4 pt-2 mt-4">
 
-                    <!-- HTTP headers -->
-                    ${editingHeaders.map(([n, v], idx) => html`
-                      <div key=${idx} class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                        <input value=${n} placeholder=${'HTTP header name ' + (idx + 1)}
-                          onInput=${e => setEditingHeaders(hs => hs.map((h, i) => i === idx ? [e.target.value, h[1]] : h))}
+                      <!-- Piping Server URL -->
+                      <div>
+                        <label class="block text-sm text-gray-400 mb-1">Piping Server</label>
+                        <input list="piping-servers" value=${pipingServerUrl}
+                          onInput=${e => setPipingServerUrl(e.target.value)}
+                          required disabled=${!supportsStreams}
                           class=${inputClass} />
-                        <input value=${v} placeholder=${'HTTP header value ' + (idx + 1)}
-                          onInput=${e => setEditingHeaders(hs => hs.map((h, i) => i === idx ? [h[0], e.target.value] : h))}
-                          class=${inputClass} />
-                        <button type="button"
-                          onClick=${() => setEditingHeaders(hs => hs.filter((_, i) => i !== idx))}
-                          class="p-2 text-gray-400 hover:text-red-400 transition-colors">−</button>
+                        <datalist id="piping-servers">
+                          <option value=${demoBaseUrl}/>
+                        </datalist>
                       </div>
-                    `)}
-                    <button type="button"
-                      onClick=${() => setEditingHeaders(hs => [...hs, ['', '']])}
-                      class="text-sm border border-gray-600 hover:border-gray-400 rounded px-3 py-1.5 text-gray-400 hover:text-white transition-colors">
-                      + Add header
-                    </button>
 
-                    <!-- SSH server port hint -->
-                    <div>
-                      <label class="block text-sm text-gray-400 mb-1">SSH server port for command</label>
-                      <input value=${sshPortHint} onInput=${e => setSshPortHint(e.target.value)}
-                        class=${inputClass} placeholder="22" />
-                    </div>
-
-                    <!-- SSH password -->
-                    <div>
-                      <label class="block text-sm text-gray-400 mb-1">SSH password</label>
-                      <div class="relative">
-                        <input type=${showSshPw ? 'text' : 'password'} value=${sshPassword}
-                          onInput=${e => setSshPassword(e.target.value)}
-                          class="${inputClass} pr-10" />
-                        <button type="button" onClick=${() => setShowSshPw(p => !p)}
-                          class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1">
-                          ${showSshPw ? '🙈' : '👁'}
-                        </button>
+                      <!-- SSH password -->
+                      <div>
+                        <label class="block text-sm text-gray-400 mb-1">SSH password</label>
+                        <div class="relative">
+                          <input type=${showSshPw ? 'text' : 'password'} value=${sshPassword}
+                            onInput=${e => setSshPassword(e.target.value)}
+                            class="${inputClass} pr-10" />
+                          <button type="button" onClick=${() => setShowSshPw(p => !p)}
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1">
+                            ${showSshPw ? '🙈' : '👁'}
+                          </button>
+                        </div>
                       </div>
+
+                      <label class="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked=${emptySshPw}
+                          onChange=${e => setEmptySshPw(e.target.checked)}
+                          class="accent-blue-500" />
+                        Empty SSH password
+                      </label>
+
+                      <label class="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked=${inclPwInUrl}
+                          onChange=${e => setInclPwInUrl(e.target.checked)}
+                          class="accent-blue-500" />
+                        Include SSH password in configured URL
+                      </label>
+
+                      <label class="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked=${autoConnect}
+                          onChange=${e => setAutoConnect(e.target.checked)}
+                          class="accent-blue-500" />
+                        Auto connect for configured URL
+                      </label>
                     </div>
+                  `}
 
-                    <label class="flex items-center gap-2 cursor-pointer text-sm">
-                      <input type="checkbox" checked=${emptySshPw}
-                        onChange=${e => setEmptySshPw(e.target.checked)}
-                        class="accent-blue-500" />
-                      Empty SSH password
-                    </label>
+                </form>
 
-                    <label class="flex items-center gap-2 cursor-pointer text-sm">
-                      <input type="checkbox" checked=${inclPwInUrl}
-                        onChange=${e => setInclPwInUrl(e.target.checked)}
-                        class="accent-blue-500" />
-                      Include SSH password in configured URL
-                    </label>
-
-                    <label class="flex items-center gap-2 cursor-pointer text-sm">
-                      <input type="checkbox" checked=${autoConnect}
-                        onChange=${e => setAutoConnect(e.target.checked)}
-                        class="accent-blue-500" />
-                      Auto connect for configured URL
-                    </label>
-                  </div>
-                `}
-
-                <!-- Connect button -->
-                <button type="button" onClick=${connect}
-                  disabled=${!formValid() || !supportsStreams}
-                  class="w-full mt-4 py-2.5 bg-gray-600 hover:bg-gray-500 disabled:opacity-40 rounded text-white font-medium transition-colors">
-                  Connect
-                </button>
-
-                <!-- Toggle more options -->
-                <button type="button" onClick=${() => setShowMore(p => !p)}
-                  class="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1">
-                  ${showMore ? '▲ Hide options' : '▼ More options'}
-                </button>
-
-                <!-- Server host command -->
-                <div class="mt-6">
-                  <div class="relative">
-                    <textarea value=${serverHostCmdEdit}
-                      onInput=${e => setServerHostCmdEdit(e.target.value)}
-                      rows="2"
-                      class="w-full bg-gray-900 text-gray-400 border border-gray-700 rounded p-3 pr-10 font-mono text-sm resize-none"
-                    ></textarea>
-                    <div class="absolute top-2 right-2">
-                      <${CopyButton} text=${serverHostCmdEdit} />
-                    </div>
-                  </div>
-                  <label class="text-gray-500 text-xs">server-host command</label>
+                <!-- Toggle more options / Set configured URL -->
+                <div class="flex items-center mt-4">
+                  <button type="button" onClick=${() => setShowMore(p => !p)}
+                    class="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1">
+                    ${showMore ? '▲ Hide options' : '▼ More options'}
+                  </button>
+                  <div class="flex-1"></div>
+                  <button type="button" onClick=${setConfiguredUrl}
+                    class="text-sm border border-gray-600 hover:border-gray-400 rounded px-3 py-1.5 text-gray-400 hover:text-white transition-colors flex items-center gap-2">
+                    🔥 Set configured URL
+                  </button>
                 </div>
-
-                <!-- Set configured URL -->
-                <button type="button" onClick=${setConfiguredUrl}
-                  class="text-sm border border-gray-600 hover:border-gray-400 rounded px-3 py-1.5 text-gray-400 hover:text-white transition-colors flex items-center gap-2">
-                  🔥 Set configured URL
-                </button>
 
               </div>
             </div>

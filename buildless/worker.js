@@ -1,12 +1,10 @@
 // buildless/worker.js
 // Classic Web Worker (non-module) — loads Go WASM and exposes functions via Comlink.
 //
-// Serve the project from its root so that the relative paths below resolve:
-//   ../public/wasm_exec.js
-//   ../public/main.wasm
+// WASM files are loaded from self.location.origin (serving root).
 
 importScripts('https://unpkg.com/comlink@4.4.1/dist/umd/comlink.js');
-importScripts('../public/wasm_exec.js');
+importScripts(self.location.origin + '/wasm_exec.js');
 
 let goExited = false;
 const go = new Go(); // defined by wasm_exec.js
@@ -21,7 +19,7 @@ const exportedPromise = new Promise((resolve) => {
 // Fetch and instantiate the WASM binary.
 (async () => {
   try {
-    const res = await fetch('../public/main.wasm');
+    const res = await fetch(self.location.origin + '/main.wasm');
     const result = await WebAssembly.instantiateStreaming(res, go.importObject);
     go.run(result.instance).then(() => { goExited = true; });
   } catch (e) {

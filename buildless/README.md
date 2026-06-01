@@ -11,8 +11,7 @@ A zero-build version of the Piping SSH frontend. Uses:
 
 ## How to serve
 
-The buildless directory must be served **from the project root** so the worker can load
-`../public/wasm_exec.js` and `../public/main.wasm` via relative URLs.
+The buildless directory can be served from any static file server:
 
 ```bash
 # From the repository root — any static file server works, e.g.:
@@ -25,6 +24,19 @@ npx serve .
 python3 -m http.server 8080
 # Then open: http://localhost:8080/buildless/
 ```
+
+The WASM worker now uses `self.location.origin` to load `wasm_exec.js` and `main.wasm`,
+so they must be available at the root of your server.
+
+## Notes on changes
+
+This version has been updated to align with the main `src/` frontend:
+
+- Uses **WebSocketStream** instead of HTTP fetch for the piping transport
+- Server host/port is passed as URL query parameters (`?hostname=&port=`)
+- Uses **`@xterm/xterm`** (npm-style) imports from CDN via import map
+- Removed HTTP header editing and server-host command display
+- Fragment params simplified: `host` + `port` replace `cs_path` + `sc_path` + `headers`
 
 ## Files
 
