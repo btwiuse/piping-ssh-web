@@ -785,12 +785,25 @@ function KeyManager() {
 
 // ─── Dialog wrapper ───────────────────────────────────────────────────────────
 
+const dialogStack = [];
+
 function Dialog({ title, open, onClose, children, wide = false }) {
   useEffect(() => {
     if (!open) return;
-    const handler = e => { if (e.key === 'Escape') onClose(); };
+    const id = dialogStack.push(Symbol()) - 1;
+    const handler = e => {
+      if (e.key !== 'Escape') return;
+      if (dialogStack[id] && dialogStack[dialogStack.length - 1] === dialogStack[id]) {
+        onClose();
+      }
+    };
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      delete dialogStack[id];
+      // Trim trailing holes left by deleted symbols
+      while (dialogStack.length > 0 && dialogStack[dialogStack.length - 1] === undefined) dialogStack.pop();
+    };
   }, [open, onClose]);
 
   if (!open) return null;
