@@ -811,23 +811,37 @@ function Dialog({ title, open, onClose, children, wide = false }) {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 const demoBaseUrl = 'https://websocket-tcp-proxy.navigaid.workers.dev/';
+const FORM_STORAGE_KEY = 'piping-ssh-form';
+
+function loadSaved(key, fallback) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(FORM_STORAGE_KEY) || '{}');
+    return saved[key] !== undefined ? saved[key] : fallback;
+  } catch { return fallback; }
+}
 
 function App() {
-  const [pipingServerUrl,   setPipingServerUrl]   = useState(fragmentParams.pipingServerUrl() ?? demoBaseUrl);
-  const [sshHost,           setSshHost]           = useState(fragmentParams.sshHost() ?? 'terminal.shop');
-  const [sshPort,           setSshPort]           = useState(fragmentParams.sshPort() ?? '22');
-  const [username,          setUsername]          = useState(fragmentParams.sshUsername() ?? '');
-  const [sshPassword,       setSshPassword]       = useState(fragmentParams.sshPassword() ?? '');
+  const [pipingServerUrl,   setPipingServerUrl]   = useState(loadSaved('pipingServerUrl', fragmentParams.pipingServerUrl() ?? demoBaseUrl));
+  const [sshHost,           setSshHost]           = useState(loadSaved('sshHost', fragmentParams.sshHost() ?? 'terminal.shop'));
+  const [sshPort,           setSshPort]           = useState(loadSaved('sshPort', fragmentParams.sshPort() ?? '22'));
+  const [username,          setUsername]          = useState(loadSaved('username', fragmentParams.sshUsername() ?? ''));
+  const [sshPassword,       setSshPassword]       = useState(loadSaved('sshPassword', fragmentParams.sshPassword() ?? ''));
   const [showSshPw,         setShowSshPw]         = useState(false);
-  const [emptySshPw,        setEmptySshPw]        = useState(fragmentParams.sshPassword() === '');
-  const [inclPwInUrl,       setInclPwInUrl]       = useState(fragmentParams.sshPassword() !== undefined);
-  const [autoConnect,       setAutoConnect]       = useState(fragmentParams.autoConnect() ?? false);
+  const [emptySshPw,        setEmptySshPw]        = useState(loadSaved('emptySshPw', fragmentParams.sshPassword() === ''));
+  const [inclPwInUrl,       setInclPwInUrl]       = useState(loadSaved('inclPwInUrl', fragmentParams.sshPassword() !== undefined));
+  const [autoConnect,       setAutoConnect]       = useState(loadSaved('autoConnect', fragmentParams.autoConnect() ?? false));
   const [showMore,          setShowMore]          = useState(false);
   const [connecting,        setConnecting]        = useState(false);
   const [supportsStreams,   setSupportsStreams]   = useState(true);
   const [keyMgrOpen,        setKeyMgrOpen]        = useState(false);
   const [newKeyOpen,        setNewKeyOpen]        = useState(false);
   const [genKeyOpen,        setGenKeyOpen]        = useState(false);
+
+  // Persist form state to sessionStorage
+  useEffect(() => {
+    const state = { pipingServerUrl, sshHost, sshPort, username, sshPassword, emptySshPw, inclPwInUrl, autoConnect };
+    try { sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }, [pipingServerUrl, sshHost, sshPort, username, sshPassword, emptySshPw, inclPwInUrl, autoConnect]);
 
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
@@ -881,7 +895,7 @@ function App() {
 
       <!-- App bar -->
       <header class="flex-shrink-0 h-12 flex items-center px-6 gap-4 z-10 border-b border-gray-800/50">
-        <a href="" class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
+        <a href="" onClick=${e => { e.preventDefault(); setConnecting(false); window.scrollTo(0, 0); }} class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
 
         <button type="button" onClick=${() => setKeyMgrOpen(true)}
           class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
