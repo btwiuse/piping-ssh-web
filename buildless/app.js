@@ -294,7 +294,20 @@ function CopyButton({ text }) {
 
 function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
   const termRef  = useRef(null);
+  const fitRef   = useRef(null);
+  const termApi  = useRef(null);
   const [connState, setConnState] = useState('connecting');
+
+  // Fit terminal after DOM layout is committed (terminal div visible)
+  useEffect(() => {
+    if (connState !== 'connected') return;
+    const raf1 = requestAnimationFrame(() => {
+      fitRef.current?.();
+      termApi.current?.focus();
+      requestAnimationFrame(() => fitRef.current?.());
+    });
+    return () => cancelAnimationFrame(raf1);
+  }, [connState]);
 
   useEffect(() => {
     let localCancelled = false;
@@ -317,10 +330,21 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
         mc.port1.postMessage({ type: 'resize', cols: dims.cols, rows: dims.rows });
         fitAddon.fit();
       };
+      fitRef.current = fit;
+      termApi.current = term;
       window.addEventListener('resize', fit);
 
       // WebSocketStream transport
-      const transport = await new WebSocketStream(pipingServerUrl).opened;
+      let transport;
+      try {
+        transport = await new WebSocketStream(pipingServerUrl).opened;
+      } catch (e) {
+        console.error('WebSocket connection failed', e);
+        alert('WebSocket connection failed: ' + (e.message || e));
+        localCancelled = true;
+        onEnd();
+        return;
+      }
 
       const termReadable = new ReadableStream({ start(ctrl) { term.onData(d => ctrl.enqueue(d)); } });
       window.addEventListener('beforeunload', () => mc.port1.postMessage({ type: 'disconnect' }));
@@ -395,10 +419,6 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
 
             onConnected() {
               setConnState('connected');
-              setTimeout(() => {
-                fit();
-                term.focus();
-              }, 0);
             },
           }),
         );

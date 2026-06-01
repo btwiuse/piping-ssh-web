@@ -111,7 +111,14 @@ async function start() {
     fitAddon.fit();
   }
 
-  const transport = await new WebSocketStream(props.pipingServerUrl).opened;
+  let transport;
+  try {
+    transport = await new WebSocketStream(props.pipingServerUrl).opened;
+  } catch (e) {
+    showSnackbar({ message: "WebSocket connection failed: " + (e instanceof Error ? e.message : String(e)) });
+    emit("end");
+    return;
+  }
   const termReadable = new ReadableStream<string>({
     start(ctrl) {
       // NOTE: listener registration in Worker using Comlink does not work
