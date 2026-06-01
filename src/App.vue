@@ -182,10 +182,10 @@ const KeyGenerator = defineAsyncComponent(() => import("@/components/KeyGenerato
 const supportsRequestStreams = ref(true /* There are many Chromium-based browser users for now */);
 supportsRequestStreamsPromise.then(supports => supportsRequestStreams.value = supports);
 
-const pipingServerUrl = ref<string>(fragmentParams.pipingServerUrl() ?? "https://ppng.io");
+const demoUrl = "https://websocket-tcp-proxy.navigaid.workers.dev/terminal.shop:22"
+const pipingServerUrl = ref<string>(fragmentParams.pipingServerUrl() ?? demoUrl);
 const pipingServerUrls = ref<string[]>([
-  "https://ppng.io",
-  "https://piping.nwtgck.repl.co",
+  demoUrl,
 ]);
 const editingPipingServerHeaders = ref<Array<[string, string]>>(fragmentParams.pipingServerHeaders() ?? []);
 const pipingServerHeaders = computed<Array<[string, string]>>(() => {
