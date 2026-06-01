@@ -455,10 +455,10 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
               const ans = await showPrompt({
                 title:       'New host',
                 message:     `${key.type} key fingerprint is ${key.fingerprint}\nAre you sure you want to continue connecting?`,
-                placeholder: 'yes/no/[fingerprint]',
+                showsInput:  false,
                 width:       '28rem',
               });
-              if (ans === 'yes' || ans === key.fingerprint) {
+              if (ans !== undefined) {
                 serverHostKeyMgr.trust(key.fingerprint);
                 return true;
               }
@@ -816,7 +816,7 @@ function KeyManager() {
 
 // ─── HostManager ─────────────────────────────────────────────────────────────
 
-function HostManager({ onConnect }) {
+function HostManager({ onConnect, activeHost, onDisconnect }) {
   const hosts = useStoredHosts();
   const [expanded, setExpanded] = useState(null);
   const [edits, setEdits] = useState({});
@@ -826,6 +826,10 @@ function HostManager({ onConnect }) {
     if (ans === undefined) return;
     setExpanded(null);
     removeHost(idx);
+  }
+
+  function isActiveHost(h) {
+    return activeHost && activeHost.hostname === h.hostname && activeHost.port === h.port && activeHost.username === h.username;
   }
 
   const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600';
@@ -838,6 +842,7 @@ function HostManager({ onConnect }) {
     <div class="space-y-2">
       ${hosts.map((h, idx) => {
         const open = expanded === idx;
+        const active = isActiveHost(h);
 
         return html`
           <div key=${idx} class="border border-gray-800 rounded-sm overflow-hidden">
@@ -846,18 +851,24 @@ function HostManager({ onConnect }) {
               <button type="button"
                 onClick=${() => setExpanded(open ? null : idx)}
                 class="flex items-center gap-3 flex-1 min-w-0 text-left">
-                <span class="text-base">🖥</span>
+                <span class="text-base ${active ? '' : ''}">${active ? '🔌' : '🖥'}</span>
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm truncate">${h.name}</div>
+                  <div class="text-sm truncate ${active ? 'text-amber-500' : ''}">${h.name}${active ? ' (connected)' : ''}</div>
                   <div class="text-xs text-gray-600 font-mono truncate">${h.username}@${h.hostname}:${h.port}</div>
                 </div>
                 <span class="text-gray-600 text-xs flex-shrink-0">${open ? '▲' : '▼'}</span>
               </button>
-              <!-- Connect button -->
-              <button type="button" onClick=${() => onConnect(h)}
-                class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-xs text-white transition-colors flex-shrink-0">
-                Connect
-              </button>
+              <!-- Connect / Disconnect button -->
+              ${active
+                ? html`<button type="button" onClick=${onDisconnect}
+                    class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-xs text-white transition-colors flex-shrink-0 w-28 text-center">
+                    Disconnect
+                  </button>`
+                : html`<button type="button" onClick=${() => onConnect(h)}
+                    class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-xs text-white transition-colors flex-shrink-0 w-28 text-center">
+                    Connect
+                  </button>`
+              }
             </div>
 
             <!-- Expanded panel -->
@@ -991,6 +1002,7 @@ function App() {
   const [genKeyOpen,        setGenKeyOpen]        = useState(false);
   const [hostMgrOpen,       setHostMgrOpen]       = useState(false);
   const [connectOpts,       setConnectOpts]       = useState(null);
+  const [connectEpoch,      setConnectEpoch]      = useState(0);
 
   // Persist form state to sessionStorage
   useEffect(() => {
@@ -1032,7 +1044,7 @@ function App() {
       setConnectOpts(host);
       setHostMgrOpen(false);
     } else {
-      setConnectOpts(null);
+      setConnectOpts({ hostname: sshHost, port: sshPort, username });
       // Save to host presets
       const hosts = getStoredHosts();
       const idx   = hosts.findIndex(h => h.hostname === sshHost && h.port === sshPort && h.username === username);
@@ -1041,6 +1053,7 @@ function App() {
       else            { hosts.push(entry); }
       persistHosts(hosts);
     }
+    setConnectEpoch(n => n + 1);
     setConnecting(true);
   }
 
@@ -1071,7 +1084,7 @@ function App() {
 
       <!-- App bar -->
       <header class="flex-shrink-0 h-12 flex items-center px-6 gap-4 z-10 border-b border-gray-800/50">
-        <a href="" onClick=${e => { e.preventDefault(); setConnecting(false); window.scrollTo(0, 0); }} class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
+        <a href="" onClick=${e => { e.preventDefault(); setConnecting(false); setConnectOpts(null); setConnectEpoch(0); window.scrollTo(0, 0); }} class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
 
         <button type="button" onClick=${() => setKeyMgrOpen(true)}
           class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2.5 py-1">
@@ -1095,11 +1108,11 @@ function App() {
       <!-- Main content -->
       <main class="flex-1 flex flex-col">
         ${connecting
-          ? html`<${PipingSsh}
+          ? html`<${PipingSsh} key=${connectEpoch}
               pipingServerUrl=${pipingFullUrl}
               username=${connUser}
               defaultSshPassword=${connPw}
-              onEnd=${() => { setConnecting(false); setConnectOpts(null); }}
+              onEnd=${() => { setConnecting(false); setConnectOpts(null); setConnectEpoch(0); }}
             />`
           : html`
             <div class="max-w-xl mx-auto px-6 pt-12">
@@ -1245,7 +1258,7 @@ function App() {
 
       <!-- Hosts dialog -->
       <${Dialog} title="Hosts" open=${hostMgrOpen} onClose=${() => setHostMgrOpen(false)} wide=${true}>
-        <${HostManager} onConnect=${connect} />
+        <${HostManager} onConnect=${connect} activeHost=${connectOpts} onDisconnect=${() => { setConnecting(false); setConnectOpts(null); setHostMgrOpen(false); }} />
       <//>
     </div>
   `;
