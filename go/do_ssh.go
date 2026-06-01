@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"io"
 	"net"
 	"syscall/js"
@@ -52,6 +53,7 @@ type AuthKeySet struct {
 	privateKeyStr string
 	getPassphrase func() (string, error)
 	cachedSigner  ssh.Signer
+	cachedRawKey  interface{}
 
 	onSigned func()
 }
@@ -66,6 +68,10 @@ func (k *AuthKeySet) PublicKey() ssh.PublicKey {
 	return k.publicKey
 }
 
+func (k *AuthKeySet) getRawKey() interface{} {
+	return k.cachedRawKey
+}
+
 func (k *AuthKeySet) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
 	defer k.onSigned()
 	if k.cachedSigner != nil {
@@ -77,6 +83,10 @@ func (k *AuthKeySet) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
 		signer, err = ssh.ParsePrivateKey([]byte(k.privateKeyStr))
 		if err != nil {
 			return nil, err
+		}
+		rawKey, err := ssh.ParseRawPrivateKey([]byte(k.privateKeyStr))
+		if err == nil {
+			k.cachedRawKey = rawKey
 		}
 	} else {
 		for i := 0; i < 3; i++ {
@@ -90,6 +100,10 @@ func (k *AuthKeySet) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
 			}
 			if err != nil {
 				return nil, err
+			}
+			rawKey, err := ssh.ParseRawPrivateKeyWithPassphrase([]byte(k.privateKeyStr), []byte(passphrase))
+			if err == nil {
+				k.cachedRawKey = rawKey
 			}
 			goto passphraseOk
 		}
@@ -148,9 +162,25 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Forward SSH agent with enabled keys
+	ag := agent.NewKeyring()
+	for _, k := range options.AuthKeySets {
+		rawKey := k.getRawKey()
+		if rawKey != nil {
+			ag.Add(agent.AddedKey{PrivateKey: rawKey})
+		}
+	}
+	if err := agent.ForwardToAgent(client, ag); err != nil {
+		fmt.Println("agent forward error", err)
+	}
+
 	session, err := client.NewSession()
 	if err != nil {
 		return err
+	}
+	if err := agent.RequestAgentForwarding(session); err != nil {
+		fmt.Println("agent forwarding request error", err)
 	}
 	if err := session.RequestPty("xterm-256color", term.rows, term.cols, ssh.TerminalModes{}); err != nil {
 		session.Close()
