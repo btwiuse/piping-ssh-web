@@ -617,7 +617,7 @@ function KeyManager() {
     const orig = keys.find(k => k.sha256Fingerprint === fp);
     const edit = edits[fp];
     if (!orig || !edit) return false;
-    return orig.name !== edit.name || orig.enabled !== edit.enabled || orig.storeType !== edit.storeType;
+    return orig.name !== edit.name || orig.storeType !== edit.storeType;
   }
 
   function patchEdit(fp, patch) {
