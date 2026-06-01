@@ -10,6 +10,22 @@ import (
 	"syscall/js"
 )
 
+type confirmAgent struct {
+	agent.Agent
+	onConfirm func(key string, payload []byte) (bool, error)
+}
+
+func (a *confirmAgent) Sign(key ssh.PublicKey, data []byte) (*ssh.Signature, error) {
+	fp := fmt.Sprintf("%s %s", key.Type(), ssh.FingerprintSHA256(key))
+	ok, err := a.onConfirm(fp, data)
+	if err != nil || !ok {
+		return nil, fmt.Errorf("agent sign denied")
+	}
+	return a.Agent.Sign(key, data)
+}
+
+var _ agent.Agent = (*confirmAgent)(nil)
+
 type TermWindow struct {
 	Cols int
 	Rows int
@@ -40,6 +56,7 @@ type SSHOptions struct {
 	User           string
 	OnPasswordAuth func() (string, error)
 	OnHostKey      func(value js.Value) (bool, error)
+	OnAgentConfirm func(key string, payload []byte) (bool, error)
 	ResizeCh       <-chan TermWindow
 	AuthKeySets    []*AuthKeySet
 	OnConnected    func()
@@ -183,7 +200,11 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 		}
 		ag.Add(agent.AddedKey{PrivateKey: rawKey})
 	}
-	if err := agent.ForwardToAgent(client, ag); err != nil {
+	var forwardedAgent agent.Agent = ag
+	if options.OnAgentConfirm != nil {
+		forwardedAgent = &confirmAgent{Agent: ag, onConfirm: options.OnAgentConfirm}
+	}
+	if err := agent.ForwardToAgent(client, forwardedAgent); err != nil {
 		fmt.Println("agent forward error", err)
 	}
 

@@ -118,6 +118,13 @@ func jsDoSsh(this js.Value, args []js.Value) any {
 			}
 			return value.Bool(), err
 		}
+		onAgentConfirm := func(key string, payload []byte) (bool, error) {
+			value, err := jsutil.AwaitPromise(jsFunctions.Call("onAgentConfirm", key, jsutil.BytesToUint8Array(payload)))
+			if err != nil {
+				return false, err
+			}
+			return value.Bool(), nil
+		}
 		resizeCh := make(chan TermWindow)
 		disconnectCh := make(chan struct{})
 		jsParams.Get("messagePort").Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -174,6 +181,7 @@ func jsDoSsh(this js.Value, args []js.Value) any {
 			ResizeCh:       resizeCh,
 			OnPasswordAuth: onPasswordAuth,
 			OnHostKey:      onHostKey,
+			OnAgentConfirm: onAgentConfirm,
 			AuthKeySets:    authKeySets,
 			OnConnected: func() {
 				jsFunctions.Call("onConnected")

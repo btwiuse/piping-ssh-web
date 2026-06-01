@@ -466,6 +466,17 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
               return false;
             },
 
+            async onAgentConfirm(key, payload) {
+              const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              const ans = await showPrompt({
+                title:       'Agent sign',
+                message:     `${key}\nPayload: ${hex}\nAllow agent sign?`,
+                showsInput:  false,
+                width:       '32rem',
+              });
+              return ans !== undefined;
+            },
+
             onConnected() {
               setConnState('connected');
             },
