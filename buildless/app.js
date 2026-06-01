@@ -197,7 +197,7 @@ function GlobalPrompt() {
   return html`
     <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
          onClick=${cancel}>
-      <div class="bg-gray-800 rounded-lg p-6 shadow-2xl"
+      <div class="bg-gray-900 border border-gray-800 p-6"
            style=${{ width: st.width, maxWidth: '90vw', minWidth: '20rem' }}
            onClick=${e => e.stopPropagation()}>
         <h3 class="text-lg font-semibold mb-3">${st.title}</h3>
@@ -224,7 +224,7 @@ function GlobalPrompt() {
           <button type="button" onClick=${cancel}
             class="px-4 py-2 text-gray-400 hover:text-white transition-colors">Cancel</button>
           <button type="button" onClick=${ok}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors">OK</button>
+            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-sm text-white transition-colors">OK</button>
         </div>
       </div>
     </div>
@@ -254,7 +254,7 @@ function GlobalSnackbar() {
   if (!st.shows) return null;
 
   return html`
-    <div class="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-700 border border-gray-600 text-white px-5 py-2.5 rounded-lg shadow-xl z-40 text-sm whitespace-nowrap">
+    <div class="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-900 border border-gray-800 text-gray-300 px-4 py-2 z-40 text-xs whitespace-nowrap">
       ${st.message}
     </div>
   `;
@@ -440,7 +440,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
         <div class="flex flex-col items-center justify-center gap-6 pt-16">
           <div class="relative w-36 h-36">
             <div class="absolute inset-0 rounded-full border-2 border-gray-700"></div>
-            <div class="absolute inset-0 rounded-full border-2 border-t-blue-400 animate-spin"></div>
+            <div class="absolute inset-0 rounded-full border-2 border-t-amber-500 animate-spin"></div>
           </div>
           <p class="text-gray-400">Connecting...</p>
         </div>
@@ -795,7 +795,7 @@ function Dialog({ title, open, onClose, children, wide = false }) {
   return html`
     <div class="fixed inset-0 bg-black/60 flex items-start justify-center z-30 p-4 overflow-y-auto"
          onClick=${onClose}>
-      <div class="bg-gray-800 rounded-lg shadow-2xl my-4 flex flex-col"
+      <div class="bg-gray-900 border border-gray-800 my-4 flex flex-col"
            style=${{ width: wide ? '80vw' : '60vw', maxWidth: '95vw', minWidth: '20rem', minHeight: '70vh' }}
            onClick=${e => e.stopPropagation()}>
         <div class="flex items-center px-4 py-3 border-b border-gray-700 flex-shrink-0">
@@ -875,31 +875,23 @@ function App() {
     showSnackbar({ message: 'URL updated' });
   }
 
-  const inputClass = 'w-full bg-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500';
+  const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-gray-600 transition-colors';
 
   return html`
     <div class="min-h-screen flex flex-col">
 
       <!-- App bar -->
-      <header class="flex-shrink-0 bg-gray-900 border-b border-gray-800 h-16 flex items-center px-4 gap-3 z-10">
-        <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-gray-300">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/>
-          </svg>
-        </div>
-        <a href="" class="font-semibold text-gray-100 no-underline mr-auto">Piping SSH</a>
+      <header class="flex-shrink-0 h-12 flex items-center px-6 gap-4 z-10 border-b border-gray-800/50">
+        <a href="" class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
 
         <button type="button" onClick=${() => setKeyMgrOpen(true)}
-          class="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-          </svg>
-          Manage keys
+          class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+          Keys
         </button>
 
         <a href="https://github.com/nwtgck/piping-ssh-web" target="_blank" rel="noopener"
-          class="p-2 text-gray-400 hover:text-white transition-colors rounded">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          class="text-gray-600 hover:text-gray-400 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
           </svg>
         </a>
@@ -915,116 +907,114 @@ function App() {
               onEnd=${() => setConnecting(false)}
             />`
           : html`
-            <div class="container mx-auto max-w-2xl px-4 py-6">
+            <div class="max-w-lg mx-auto px-6 pt-12">
 
               ${!supportsStreams && html`
-                <div class="border border-yellow-600 rounded p-4 mb-6 text-sm text-yellow-200">
-                  ⚠ Sorry, this browser is not supported.<br/>
-                  Use Google Chrome 105 or higher.<br/>
-                  You can also use Microsoft Edge or other Chromium-based browsers.
+                <div class="border border-amber-800/50 rounded-sm p-3 mb-8 text-xs text-amber-600/80">
+                  ⚠ Browser not supported. Use Chrome 105+, Edge, or other Chromium-based browsers.
                 </div>
               `}
 
-              <div class="bg-gray-800 rounded-lg p-6" style=${{ minHeight: '70vh' }}>
-                <form onSubmit=${e => { e.preventDefault(); connect(); }}>
+              <form onSubmit=${e => { e.preventDefault(); connect(); }} class="space-y-5">
 
-                  <!-- ssh-host / ssh-port -->
-                  <div class="grid grid-cols-2 gap-3">
-                    <div>
-                      <label class="block text-sm text-gray-400 mb-1">SSH server host</label>
-                      <input name="ssh-host" autocomplete="host" value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
-                        disabled=${!supportsStreams} class=${inputClass} />
-                    </div>
-                    <div>
-                      <label class="block text-sm text-gray-400 mb-1">SSH server port</label>
-                      <input name="ssh-port" autocomplete="port" value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
-                        disabled=${!supportsStreams} class=${inputClass} />
-                    </div>
-                  </div>
-
-                  <!-- Username -->
-                  <div class="mb-4">
-                    <label class="block text-sm text-gray-400 mb-1">user name</label>
-                    <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
+                <!-- ssh-host / ssh-port (asymmetric) -->
+                <div class="flex gap-3">
+                  <div class="flex-1" style=${{ minWidth: 0 }}>
+                    <input name="ssh-host" autocomplete="host" value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
+                      placeholder="ssh host"
                       disabled=${!supportsStreams} class=${inputClass} />
                   </div>
-
-                  <!-- Connect button -->
-                  <button type="submit"
-                    disabled=${!formValid() || !supportsStreams}
-                    class="w-full py-2.5 bg-gray-600 hover:bg-gray-500 disabled:opacity-40 rounded text-white font-medium transition-colors">
-                    Connect
-                  </button>
-
-                  <!-- More options (collapsible) -->
-                  ${showMore && html`
-                    <div class="space-y-4 pt-2 mt-4">
-
-                      <!-- Piping Server URL -->
-                      <div>
-                        <label class="block text-sm text-gray-400 mb-1">Piping Server</label>
-                        <input list="piping-servers" value=${pipingServerUrl}
-                          onInput=${e => setPipingServerUrl(e.target.value)}
-                          required disabled=${!supportsStreams}
-                          class=${inputClass} />
-                        <datalist id="piping-servers">
-                          <option value=${demoBaseUrl}/>
-                        </datalist>
-                      </div>
-
-                      <!-- SSH password -->
-                      <div>
-                        <label class="block text-sm text-gray-400 mb-1">SSH password</label>
-                        <div class="relative">
-                          <input type=${showSshPw ? 'text' : 'password'} value=${sshPassword}
-                            onInput=${e => setSshPassword(e.target.value)}
-                            class="${inputClass} pr-10" />
-                          <button type="button" onClick=${() => setShowSshPw(p => !p)}
-                            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1">
-                            ${showSshPw ? '🙈' : '👁'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <label class="flex items-center gap-2 cursor-pointer text-sm">
-                        <input type="checkbox" checked=${emptySshPw}
-                          onChange=${e => setEmptySshPw(e.target.checked)}
-                          class="accent-blue-500" />
-                        Empty SSH password
-                      </label>
-
-                      <label class="flex items-center gap-2 cursor-pointer text-sm">
-                        <input type="checkbox" checked=${inclPwInUrl}
-                          onChange=${e => setInclPwInUrl(e.target.checked)}
-                          class="accent-blue-500" />
-                        Include SSH password in configured URL
-                      </label>
-
-                      <label class="flex items-center gap-2 cursor-pointer text-sm">
-                        <input type="checkbox" checked=${autoConnect}
-                          onChange=${e => setAutoConnect(e.target.checked)}
-                          class="accent-blue-500" />
-                        Auto connect for configured URL
-                      </label>
-                    </div>
-                  `}
-
-                </form>
-
-                <!-- Toggle more options / Set configured URL -->
-                <div class="flex items-center mt-4">
-                  <button type="button" onClick=${() => setShowMore(p => !p)}
-                    class="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1">
-                    ${showMore ? '▲ Hide options' : '▼ More options'}
-                  </button>
-                  <div class="flex-1"></div>
-                  <button type="button" onClick=${setConfiguredUrl}
-                    class="text-sm border border-gray-600 hover:border-gray-400 rounded px-3 py-1.5 text-gray-400 hover:text-white transition-colors flex items-center gap-2">
-                    🔥 Set configured URL
-                  </button>
+                  <div class="w-24 flex-shrink-0">
+                    <input name="ssh-port" autocomplete="port" value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
+                      placeholder="port"
+                      disabled=${!supportsStreams} class=${inputClass} />
+                  </div>
                 </div>
 
+                <!-- Username -->
+                <div>
+                  <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
+                    placeholder="username"
+                    disabled=${!supportsStreams} class=${inputClass} />
+                </div>
+
+                <!-- Connect button -->
+                <button type="submit"
+                  disabled=${!formValid() || !supportsStreams}
+                  class="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-sm text-white font-medium transition-colors tracking-wide">
+                  Connect
+                </button>
+
+                <!-- More options (collapsible) -->
+                ${showMore && html`
+                  <div class="space-y-4 pt-1 border-t border-gray-800/50">
+
+                    <!-- Piping Server URL -->
+                    <div>
+                      <label class="block text-xs text-gray-600 mb-1.5 tracking-wide uppercase">Piping Server</label>
+                      <input list="piping-servers" value=${pipingServerUrl}
+                        onInput=${e => setPipingServerUrl(e.target.value)}
+                        required disabled=${!supportsStreams}
+                        class=${inputClass} />
+                      <datalist id="piping-servers">
+                        <option value=${demoBaseUrl}/>
+                      </datalist>
+                    </div>
+
+                    <!-- SSH password -->
+                    <div>
+                      <label class="block text-xs text-gray-600 mb-1.5 tracking-wide uppercase">SSH password</label>
+                      <div class="relative">
+                        <input type=${showSshPw ? 'text' : 'password'} value=${sshPassword}
+                          onInput=${e => setSshPassword(e.target.value)}
+                          class="${inputClass} pr-10" />
+                        <button type="button" onClick=${() => setShowSshPw(p => !p)}
+                          class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 p-1">
+                          ${showSshPw ? '🙈' : '👁'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-x-6 gap-y-2">
+                      <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-500 hover:text-gray-400 transition-colors">
+                        <input type="checkbox" checked=${emptySshPw}
+                          onChange=${e => setEmptySshPw(e.target.checked)}
+                          class="accent-amber-500" />
+                        Empty password
+                      </label>
+
+                      <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-500 hover:text-gray-400 transition-colors">
+                        <input type="checkbox" checked=${inclPwInUrl}
+                          onChange=${e => setInclPwInUrl(e.target.checked)}
+                          class="accent-amber-500" />
+                        Include password in URL
+                      </label>
+
+                      <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-500 hover:text-gray-400 transition-colors">
+                        <input type="checkbox" checked=${autoConnect}
+                          onChange=${e => setAutoConnect(e.target.checked)}
+                          class="accent-amber-500" />
+                        Auto connect
+                      </label>
+                    </div>
+                  </div>
+                `}
+
+              </form>
+
+              <!-- Toggle more options / Set configured URL -->
+              <div class="flex items-center mt-5 pt-3 border-t border-gray-800/30">
+                <button type="button" onClick=${() => setShowMore(p => !p)}
+                  class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                  ${showMore ? '— Hide options' : '+ More options'}
+                </button>
+                <div class="flex-1"></div>
+                <button type="button" onClick=${setConfiguredUrl}
+                  class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                  Set configured URL
+                </button>
               </div>
+
             </div>
           `
         }
@@ -1038,11 +1028,11 @@ function App() {
       <${Dialog} title="Keys" open=${keyMgrOpen} onClose=${() => setKeyMgrOpen(false)} wide=${true}>
         <div class="flex justify-end gap-3 mb-4">
           <button type="button" onClick=${() => setNewKeyOpen(true)}
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white transition-colors">
+            class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
             + New
           </button>
           <button type="button" onClick=${() => setGenKeyOpen(true)}
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white transition-colors">
+            class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
             ✦ Generate
           </button>
         </div>
