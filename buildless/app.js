@@ -117,6 +117,11 @@ const presetHosts = [
   { name: 'Whoami',          hostname: 'whoami.filippo.io', port: '22', username: '', password: '', agentForwarding: false },
   { name: 'Pwnable.kr',      hostname: 'pwnable.kr',    port: '2222', username: 'fd', password: 'guest', agentForwarding: false },
   { name: 'Exe.dev',         hostname: 'exe.dev',      port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'SDF (menu)',     hostname: 'tty.sdf.org',  port: '22', username: 'menu', password: '', agentForwarding: false },
+  { name: 'SDF (new)',      hostname: 'sdf.org',      port: '22', username: 'new', password: '', agentForwarding: false },
+  { name: 'Tilde.Town',     hostname: 'tilde.town',   port: '22', username: 'welcome', password: '', agentForwarding: false },
+  { name: 'SSH Bot',        hostname: 'ssh.bot',      port: '22', username: 'key_c7b2m', password: '', agentForwarding: false },
+  { name: 'SSH-J',          hostname: 'ssh-j.com',    port: '22', username: '', password: '', agentForwarding: false },
 ];
 
 const HOSTS_STORAGE_KEY = 'preset_hosts';
