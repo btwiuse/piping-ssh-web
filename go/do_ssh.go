@@ -141,14 +141,7 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 	go func() {
 		<-options.DisconnectCh
 		fmt.Println("disconnecting with chan")
-		if err := sshDisconnect(sshConn); err != nil {
-			fmt.Println("disconnect error", err)
-		}
-	}()
-	defer func() {
-		if err := sshDisconnect(sshConn); err != nil {
-			fmt.Println("disconnect error", err)
-		}
+		sshConn.Close()
 	}()
 	options.OnConnected()
 	client := ssh.NewClient(sshConn, chans, reqs)
@@ -213,21 +206,4 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 }
 
 // proposal: https://github.com/golang/go/issues/37913
-func sshDisconnect(sshConn ssh.Conn) (err error) {
-	// https://www.rfc-editor.org/rfc/rfc4253#section-12
-	const SSH_MSG_DISCONNECT = 1
-	// https://www.rfc-editor.org/rfc/rfc4253#section-11.1
-	type disconnectMsg struct {
-		Reason      uint32
-		Description string
-		LanguageTag string
-	}
-	const SSH_DISCONNECT_BY_APPLICATION = 11
 
-	p := append(
-		[]byte{SSH_MSG_DISCONNECT},
-		ssh.Marshal(disconnectMsg{Reason: SSH_DISCONNECT_BY_APPLICATION, Description: "Finished"})...,
-	)
-	// See golang-crypto.patch
-	return ssh.PublicWritePacket(sshConn, p)
-}
