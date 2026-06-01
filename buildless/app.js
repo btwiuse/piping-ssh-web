@@ -592,43 +592,7 @@ function KeyGenerator({ onSave }) {
 function KeyManager() {
   const keys = useStoredKeys();
   const [expanded, setExpanded] = useState(null);
-  const [edits,    setEdits]    = useState({});
   const [showPriv, setShowPriv] = useState({});
-
-  // Sync edits when keys change
-  useEffect(() => {
-    setEdits(prev => {
-      const next = {};
-      for (const k of keys) {
-        next[k.sha256Fingerprint] = prev[k.sha256Fingerprint] ?? {
-          name: k.name, enabled: k.enabled, storeType: k.storeType,
-        };
-      }
-      return next;
-    });
-  }, [keys]);
-
-  function getEdit(fp) {
-    const k = keys.find(k => k.sha256Fingerprint === fp);
-    return edits[fp] ?? (k ? { name: k.name, enabled: k.enabled, storeType: k.storeType } : {});
-  }
-
-  function hasChanged(fp) {
-    const orig = keys.find(k => k.sha256Fingerprint === fp);
-    const edit = edits[fp];
-    if (!orig || !edit) return false;
-    return orig.name !== edit.name || orig.storeType !== edit.storeType;
-  }
-
-  function patchEdit(fp, patch) {
-    setEdits(e => ({ ...e, [fp]: { ...e[fp], ...patch } }));
-  }
-
-  function applyUpdate(fp) {
-    const orig = keys.find(k => k.sha256Fingerprint === fp);
-    updateKey({ ...orig, ...edits[fp] });
-    showSnackbar({ message: 'Updated' });
-  }
 
   async function handleDelete(fp) {
     const ans = await showPrompt({ title: 'Remove key?', message: 'Are you sure to remove the key?', showsInput: false });
@@ -652,7 +616,6 @@ function KeyManager() {
     <div class="space-y-2">
       ${keys.map(k => {
         const fp   = k.sha256Fingerprint;
-        const edit = getEdit(fp);
         const open = expanded === fp;
         const pkShow = showPriv[fp];
         const addCmd = `mkdir -p ~/.ssh && echo '${k.publicKey.trim()}' >> ~/.ssh/authorized_keys`;
@@ -688,8 +651,8 @@ function KeyManager() {
                 <!-- Name -->
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Name</label>
-                  <input value=${edit.name}
-                    onInput=${e => patchEdit(fp, { name: e.target.value })}
+                  <input value=${k.name}
+                    onInput=${e => updateKey({ ...k, name: e.target.value })}
                     class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
                 </div>
 
@@ -699,8 +662,8 @@ function KeyManager() {
                   <div class="flex flex-wrap gap-3">
                     ${authKeysStoreTypes.map(t => html`
                       <label key=${t} class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400">
-                        <input type="radio" name=${'st-' + fp} value=${t} checked=${edit.storeType === t}
-                          onChange=${() => patchEdit(fp, { storeType: t })} class="accent-amber-500" />
+                        <input type="radio" name=${'st-' + fp} value=${t} checked=${k.storeType === t}
+                          onChange=${() => updateKey({ ...k, storeType: t })} class="accent-amber-500" />
                         ${storeTypeLabel[t]}
                       </label>
                     `)}
@@ -761,17 +724,11 @@ function KeyManager() {
                   }
                 </div>
 
-                <!-- Actions row -->
-                <div class="flex items-center gap-3 pt-1">
-                  <button type="button" onClick=${() => applyUpdate(fp)}
-                    disabled=${!hasChanged(fp)}
-                    class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-xs text-white transition-colors">
-                    Update
-                  </button>
-                  <div class="flex-1"></div>
+                <!-- Delete -->
+                <div class="flex justify-end pt-1">
                   <button type="button" onClick=${() => handleDelete(fp)}
-                    class="px-3 py-1.5 text-gray-500 hover:text-red-400 transition-colors text-xs">
-                    Delete
+                    class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-xs text-white transition-colors">
+                    🗑 Delete
                   </button>
                 </div>
               </div>
