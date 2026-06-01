@@ -36,14 +36,6 @@
             <v-sheet min-height="70vh" rounded="lg" style="padding: 1rem">
               <v-form @submit.prevent="connect" v-model="formValid" :disabled="!supportsRequestStreams">
                 <v-combobox label="Piping Server" v-model="pipingServerUrl" :items="pipingServerUrls" required variant="solo-filled" :rules="createRequiredRules('Piping Server')"></v-combobox>
-                <v-row>
-                  <v-col>
-                    <v-text-field label="client-server path" v-model="csPath" required variant="solo-filled" :rules="createRequiredRules('client-server path')"></v-text-field>
-                  </v-col>
-                  <v-col>
-                    <v-text-field label="server-client path" v-model="scPath" required variant="solo-filled" :rules="createRequiredRules('server-client path')"></v-text-field>
-                  </v-col>
-                </v-row>
                 <v-text-field label="user name" v-model="username" required variant="solo-filled" :rules="createRequiredRules('user name')"></v-text-field>
 
                 <template v-if="showsMoreOptions">
@@ -102,8 +94,6 @@
                  :piping-server-url="pipingServerUrl"
                  :piping-server-headers="pipingServerHeaders"
                  :default-ssh-password="sshPassword"
-                 :cs-path="csPath"
-                 :sc-path="scPath"
                  :username="username"
                  @end="connecting = false"
       />

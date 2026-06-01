@@ -5,12 +5,6 @@
         <v-progress-circular indeterminate color="secondary" :size="200" :width="2" style="margin-top: 3rem;">
           Connecting...
         </v-progress-circular>
-
-        <v-textarea label="server-host command" v-model="serverHostCommand" variant="outlined" rows="2" class="text-grey" style="margin-top: 5rem;">
-          <template v-slot:append-inner>
-            <CopyToClipboardButton :text="serverHostCommand"/>
-          </template>
-        </v-textarea>
       </v-col>
     </v-row>
   </v-container>
@@ -20,7 +14,6 @@
 <script setup lang="ts">
 import {nextTick, onMounted, ref} from "vue";
 import '@xterm/xterm/css/xterm.css';
-import urlJoin from "url-join";
 import * as Comlink from 'comlink';
 import {mdiCheck, mdiKey, mdiCancel} from "@mdi/js";
 import {FitAddon} from '@xterm/addon-fit';
@@ -28,17 +21,12 @@ import type {AuthKeySetForSsh} from "@/go-wasm-exported-promise";
 import {ServerHostKeyManager} from "@/ServerHostKeyManager";
 import {AuthKeySet, storedAuthKeySets} from "@/authKeySets";
 import {aliveGoWasmWorkerRemotePromise, getAuthPublicKeyType, sshPrivateKeyIsEncrypted} from "@/go-wasm-using-worker";
-import {fragmentParams} from "@/fragment-params";
-import CopyToClipboardButton from "@/components/CopyToClipboardButton.vue";
-import {getServerHostCommand} from "@/getServerHostCommand";
 import {showPrompt} from "@/components/Globals/prompt/global-prompt";
 import {showSnackbar} from "@/components/Globals/snackbar/global-snackbar";
 
 const props = defineProps<{
   pipingServerUrl: string,
   pipingServerHeaders: Array<[string, string]>,
-  csPath: string,
-  scPath: string,
   username: string,
   defaultSshPassword: string | undefined,
 }>();
@@ -55,14 +43,6 @@ const terminal = ref<HTMLDivElement>();
 const serverHostKeyManager = new ServerHostKeyManager();
 
 const canceled = ref(false);
-
-const serverHostCommand = ref(getServerHostCommand({
-  pipingServerUrl: props.pipingServerUrl,
-  pipingServerHeaders: props.pipingServerHeaders,
-  csPath: props.csPath,
-  scPath: props.scPath,
-  sshServerPort: fragmentParams.sshServerPortForHint() ?? 22,
-}));
 
 async function getAuthKeySetsForSsh(): Promise<AuthKeySetForSsh[]> {
   const notSorted = await Promise.all(storedAuthKeySets.value
