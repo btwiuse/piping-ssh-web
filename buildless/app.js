@@ -196,6 +196,7 @@ function GlobalPrompt() {
 
   return html`
     <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+         onKeyDown=${e => e.key === 'Escape' && cancel()}
          onClick=${cancel}>
       <div class="bg-gray-900 border border-gray-800 p-6"
            style=${{ width: st.width, maxWidth: '90vw', minWidth: '20rem' }}
@@ -208,7 +209,7 @@ function GlobalPrompt() {
               type=${isPw && !showPw ? 'password' : 'text'}
               value=${text}
               onInput=${e => setText(e.target.value)}
-              onKeyDown=${e => e.key === 'Enter' && ok()}
+              onKeyDown=${e => e.key === 'Enter' ? ok() : e.key === 'Escape' && cancel()}
               placeholder=${st.placeholder}
               class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600 transition-colors ${isPw ? 'pr-10' : ''}"
             />
