@@ -4,9 +4,10 @@ package main
 
 import (
 	"fmt"
+	"syscall/js"
+
 	"github.com/nwtgck/piping-ssh-web/go/jsutil"
 	"golang.org/x/crypto/ssh"
-	"syscall/js"
 )
 
 func main() {
@@ -111,6 +112,25 @@ func jsDoSsh(this js.Value, args []js.Value) any {
 			}
 			return value.String(), nil
 		}
+		onKeyboardInteractive := func(name, instruction string, questions []string, echos []bool) ([]string, error) {
+			jsQuestions := js.Global().Get("Array").New(len(questions))
+			for i, q := range questions {
+				jsQuestions.SetIndex(i, q)
+			}
+			jsEchos := js.Global().Get("Array").New(len(echos))
+			for i, e := range echos {
+				jsEchos.SetIndex(i, e)
+			}
+			value, err := jsutil.AwaitPromise(jsFunctions.Call("onKeyboardInteractive", name, instruction, jsQuestions, jsEchos))
+			if err != nil {
+				return nil, err
+			}
+			answers := make([]string, value.Get("length").Int())
+			for i := range answers {
+				answers[i] = value.Index(i).String()
+			}
+			return answers, nil
+		}
 		onHostKey := func(value js.Value) (bool, error) {
 			value, err := jsutil.AwaitPromise(jsFunctions.Call("onHostKey", value))
 			if err != nil {
@@ -177,16 +197,18 @@ func jsDoSsh(this js.Value, args []js.Value) any {
 			))
 		}
 		err := DoSsh(conn, term, &SSHOptions{
-			User:           jsParams.Get("username").String(),
-			ResizeCh:       resizeCh,
-			OnPasswordAuth: onPasswordAuth,
-			OnHostKey:      onHostKey,
-			OnAgentConfirm: onAgentConfirm,
-			AuthKeySets:    authKeySets,
+			User:                  jsParams.Get("username").String(),
+			ResizeCh:              resizeCh,
+			OnPasswordAuth:        onPasswordAuth,
+			OnKeyboardInteractive: onKeyboardInteractive,
+			OnHostKey:             onHostKey,
+			OnAgentConfirm:        onAgentConfirm,
+			AuthKeySets:           authKeySets,
 			OnConnected: func() {
 				jsFunctions.Call("onConnected")
 			},
-			DisconnectCh: disconnectCh,
+			DisconnectCh:    disconnectCh,
+			AgentForwarding: jsParams.Get("agentForwarding").Bool(),
 		})
 		if err != nil {
 			return nil, err

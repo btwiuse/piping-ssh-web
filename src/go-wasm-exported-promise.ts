@@ -23,6 +23,7 @@ export type GoWasmExported = {
       termWrite(data: Uint8Array): void,
       onHostKey(arg: { key: { type: string, fingerprint: string }}): Promise<boolean>,
       onPasswordAuth(): Promise<string>,
+      onKeyboardInteractive(name: string, instruction: string, questions: string[], echos: boolean[]): Promise<string[]>,
       getAuthPrivateKeyPassphrase(sha256Fingerprint: string): Promise<string>,
       onAuthSigned(sha256Fingerprint: string): void,
       onConnected(): void,

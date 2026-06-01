@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
-	"github.com/nwtgck/piping-ssh-web/go/jsutil"
 	"net"
 	"syscall/js"
 	"time"
+
+	"github.com/nwtgck/piping-ssh-web/go/jsutil"
 )
 
 type TransportConn struct {

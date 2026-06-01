@@ -110,18 +110,32 @@ function updateKey(k) { removeKey(k.sha256Fingerprint); _addKey(k); }
 // ─── Host presets store ─────────────────────────────────────────────────────
 
 const presetHosts = [
-  { name: 'Telehack',         hostname: 'telehack.com',  port: '22', username: '', password: '' },
-  { name: 'Charm Cloud',     hostname: 'git.charm.sh',  port: '22', username: '', password: '' },
-  { name: 'Bitreich',        hostname: 'bitreich.org',  port: '22', username: '', password: '' },
-  { name: 'Terminal.Shop',   hostname: 'terminal.shop', port: '22', username: '', password: '' },
+  { name: 'Telehack',         hostname: 'telehack.com',  port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'Charm Cloud',     hostname: 'git.charm.sh',  port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'Bitreich',        hostname: 'bitreich.org',  port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'Terminal.Shop',   hostname: 'terminal.shop', port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'Whoami',          hostname: 'whoami.filippo.io', port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'Pwnable.kr',      hostname: 'pwnable.kr',    port: '2222', username: 'fd', password: 'guest', agentForwarding: false },
+  { name: 'Exe.dev',         hostname: 'exe.dev',      port: '22', username: '', password: '', agentForwarding: false },
 ];
 
 const HOSTS_STORAGE_KEY = 'preset_hosts';
 const hostSubscribers = new Set();
 
 function getStoredHosts() {
-  try { return JSON.parse(localStorage.getItem(HOSTS_STORAGE_KEY) || 'null') ?? [...presetHosts]; }
-  catch { return [...presetHosts]; }
+  let cached;
+  try { cached = JSON.parse(localStorage.getItem(HOSTS_STORAGE_KEY) || 'null'); } catch { cached = null; }
+  if (!cached || !cached.length) return [...presetHosts];
+  const cacheKey = h => `${h.hostname}:${h.port}:${h.username}`;
+  const cachedMap = new Map(cached.map(h => [cacheKey(h), h]));
+  // Presets first, overlaid with cached data if same host/port/user
+  const merged = presetHosts.map(p => cachedMap.get(cacheKey(p)) ?? p);
+  // Append cached entries not in presets
+  const seen = new Set(merged.map(cacheKey));
+  for (const c of cached) {
+    if (!seen.has(cacheKey(c))) { merged.push(c); seen.add(cacheKey(c)); }
+  }
+  return merged;
 }
 
 function notifyHostSubscribers() { hostSubscribers.forEach(fn => fn([...getStoredHosts()])); }
@@ -139,7 +153,7 @@ function persistHosts(hosts) {
 
 function addHost(h) {
   const hosts = getStoredHosts();
-  hosts.push({ ...h, addedAtMillis: Date.now() });
+  hosts.push({ ...h, agentForwarding: false, addedAtMillis: Date.now() });
   persistHosts(hosts);
 }
 
@@ -297,14 +311,14 @@ function GlobalSnackbar() {
 
   useEffect(() => {
     if (!st.shows) return;
-    const t = setTimeout(() => setSt(s => ({ ...s, shows: false })), 2500);
+    const t = setTimeout(() => setSt(s => ({ ...s, shows: false })), 6000);
     return () => clearTimeout(t);
   }, [st.shows, st.message]);
 
   if (!st.shows) return null;
 
   return html`
-    <div class="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-900 border border-gray-800 text-gray-300 px-4 py-2 z-40 text-xs whitespace-nowrap">
+    <div class="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 border border-amber-600/60 text-amber-300 px-5 py-3 z-50 text-sm whitespace-nowrap rounded shadow-lg shadow-amber-900/20 font-medium">
       ${st.message}
     </div>
   `;
@@ -342,7 +356,7 @@ function CopyButton({ text }) {
 
 // ─── PipingSsh (terminal view) ────────────────────────────────────────────────
 
-function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
+function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd }) {
   const termRef  = useRef(null);
   const fitRef   = useRef(null);
   const termApi  = useRef(null);
@@ -390,7 +404,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
         transport = await new WebSocketStream(pipingServerUrl).opened;
       } catch (e) {
         console.error('WebSocket connection failed', e);
-        alert('WebSocket connection failed: ' + (e.message || e));
+        showSnackbar({ message: 'WebSocket connection failed: ' + (e.message || e) });
         localCancelled = true;
         onEnd();
         return;
@@ -408,6 +422,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
       })))).sort((a, b) => (a.encrypted ? 1 : 0) - (b.encrypted ? 1 : 0));
 
       let pwTried = false;
+      let kiTried = false;
 
       try {
         const remote    = await getAliveWorker();
@@ -415,7 +430,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
 
         await remote.doSsh(
           Comlink.transfer({
-            transport, termReadable,
+            transport, termReadable, agentForwarding,
             initialRows: term.rows, initialCols: term.cols,
             username,
             messagePort: mc.port2,
@@ -431,6 +446,27 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
               if (pw === undefined) { localCancelled = true; throw new Error('aborted'); }
               pwTried = true;
               return pw;
+            },
+
+            async onKeyboardInteractive(name, instruction, questions, echos) {
+              // Some servers use keyboard-interactive as a password auth replacement
+              if (!kiTried && defaultSshPassword !== undefined && questions.length === 1 && !echos[0]) {
+                kiTried = true;
+                return [defaultSshPassword];
+              }
+              const header = [name, instruction].filter(Boolean).join('\n');
+              const answers = [];
+              for (let i = 0; i < questions.length; i++) {
+                const msg = [header, questions[i]].filter(Boolean).join('\n');
+                const ans = await showPrompt({
+                  title: 'Authentication',
+                  message: msg,
+                  inputType: echos[i] ? 'text' : 'password',
+                });
+                if (ans === undefined) { localCancelled = true; throw new Error('aborted'); }
+                answers.push(ans);
+              }
+              return answers;
             },
 
             async getAuthPrivateKeyPassphrase(fp) {
@@ -486,10 +522,10 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
         showSnackbar({ message: 'Finished' });
       } catch (e) {
         if (localCancelled) { showSnackbar({ message: 'Canceled' }); }
-        else { console.error('SSH error', e); alert(`SSH error: ${e}`); }
+        else { console.error('SSH error', e); showSnackbar({ message: `Connection closed: ${e.message || e}`, icon: '!' }); }
       } finally {
         window.removeEventListener('resize', fit);
-        onEnd();
+        if (localCancelled) onEnd();
       }
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -925,6 +961,14 @@ function HostManager({ onConnect, activeHost, onDisconnect }) {
                     class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
                 </div>
 
+                <!-- SSH Agent Forwarding -->
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked=${!!h.agentForwarding}
+                    onChange=${e => { const h2 = { ...h, agentForwarding: e.target.checked }; updateHost(idx, h2); }}
+                    class="accent-amber-500" />
+                  <span class="text-xs text-gray-500">Enable SSH agent forwarding</span>
+                </label>
+
                 <!-- Delete -->
                 <div class="flex justify-end pt-1">
                   <button type="button" onClick=${() => handleDelete(idx)}
@@ -1123,6 +1167,7 @@ function App() {
               pipingServerUrl=${pipingFullUrl}
               username=${connUser}
               defaultSshPassword=${connPw}
+              agentForwarding=${!!connectOpts?.agentForwarding}
               onEnd=${() => { setConnecting(false); setConnectOpts(null); setConnectEpoch(0); }}
             />`
           : html`

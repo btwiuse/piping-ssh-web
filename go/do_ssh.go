@@ -3,11 +3,12 @@ package main
 import (
 	"crypto/x509"
 	"fmt"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 	"io"
 	"net"
 	"syscall/js"
+
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 type confirmAgent struct {
@@ -53,14 +54,16 @@ func (t *Term) ReadChunk() []byte {
 }
 
 type SSHOptions struct {
-	User           string
-	OnPasswordAuth func() (string, error)
-	OnHostKey      func(value js.Value) (bool, error)
-	OnAgentConfirm func(key string, payload []byte) (bool, error)
-	ResizeCh       <-chan TermWindow
-	AuthKeySets    []*AuthKeySet
-	OnConnected    func()
-	DisconnectCh   <-chan struct{}
+	User                  string
+	OnPasswordAuth        func() (string, error)
+	OnKeyboardInteractive func(name, instruction string, questions []string, echos []bool) ([]string, error)
+	OnHostKey             func(value js.Value) (bool, error)
+	OnAgentConfirm        func(key string, payload []byte) (bool, error)
+	ResizeCh              <-chan TermWindow
+	AuthKeySets           []*AuthKeySet
+	OnConnected           func()
+	DisconnectCh          <-chan struct{}
+	AgentForwarding       bool
 }
 
 // For delay passphrase input
@@ -147,6 +150,12 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 				}
 				return password, nil
 			}), 3),
+			ssh.KeyboardInteractive(func(name, instruction string, questions []string, echos []bool) ([]string, error) {
+				if options.OnKeyboardInteractive == nil {
+					return nil, fmt.Errorf("keyboard-interactive not supported")
+				}
+				return options.OnKeyboardInteractive(name, instruction, questions, echos)
+			}),
 		},
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			ok, err := options.OnHostKey(js.ValueOf(map[string]any{
@@ -180,40 +189,48 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 		return err
 	}
 
-	// Forward SSH agent with enabled keys
-	ag := agent.NewKeyring()
-	for _, k := range options.AuthKeySets {
-		rawKey, err := ssh.ParseRawPrivateKey([]byte(k.privateKeyStr))
-		if err != nil {
-			if _, ok := err.(*ssh.PassphraseMissingError); ok && k.getPassphrase != nil {
-				passphrase, err := k.getPassphrase()
-				if err != nil {
+	var session *ssh.Session
+	if options.AgentForwarding {
+		// Forward SSH agent with enabled keys
+		ag := agent.NewKeyring()
+		for _, k := range options.AuthKeySets {
+			rawKey, err := ssh.ParseRawPrivateKey([]byte(k.privateKeyStr))
+			if err != nil {
+				if _, ok := err.(*ssh.PassphraseMissingError); ok && k.getPassphrase != nil {
+					passphrase, err := k.getPassphrase()
+					if err != nil {
+						continue
+					}
+					rawKey, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(k.privateKeyStr), []byte(passphrase))
+					if err != nil {
+						continue
+					}
+				} else {
 					continue
 				}
-				rawKey, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(k.privateKeyStr), []byte(passphrase))
-				if err != nil {
-					continue
-				}
-			} else {
-				continue
 			}
+			ag.Add(agent.AddedKey{PrivateKey: rawKey})
 		}
-		ag.Add(agent.AddedKey{PrivateKey: rawKey})
-	}
-	var forwardedAgent agent.Agent = ag
-	if options.OnAgentConfirm != nil {
-		forwardedAgent = &confirmAgent{Agent: ag, onConfirm: options.OnAgentConfirm}
-	}
-	if err := agent.ForwardToAgent(client, forwardedAgent); err != nil {
-		fmt.Println("agent forward error", err)
-	}
+		var forwardedAgent agent.Agent = ag
+		if options.OnAgentConfirm != nil {
+			forwardedAgent = &confirmAgent{Agent: ag, onConfirm: options.OnAgentConfirm}
+		}
+		if err := agent.ForwardToAgent(client, forwardedAgent); err != nil {
+			fmt.Println("agent forward error", err)
+		}
 
-	session, err := client.NewSession()
-	if err != nil {
-		return err
-	}
-	if err := agent.RequestAgentForwarding(session); err != nil {
-		fmt.Println("agent forwarding request error", err)
+		session, err = client.NewSession()
+		if err != nil {
+			return err
+		}
+		if err := agent.RequestAgentForwarding(session); err != nil {
+			fmt.Println("agent forwarding request error", err)
+		}
+	} else {
+		session, err = client.NewSession()
+		if err != nil {
+			return err
+		}
 	}
 	if err := session.RequestPty("xterm-256color", term.rows, term.cols, ssh.TerminalModes{}); err != nil {
 		session.Close()
@@ -269,4 +286,3 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 }
 
 // proposal: https://github.com/golang/go/issues/37913
-
