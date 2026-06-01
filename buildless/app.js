@@ -482,7 +482,7 @@ function KeysEditor({ onSave, initialPublicKey = '', initialPrivateKey = '' }) {
     finally { setBusy(false); }
   }
 
-  const inputClass = 'w-full bg-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
+  const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600';
 
   return html`
     <form onSubmit=${handleSave} class="space-y-4">
@@ -498,7 +498,7 @@ function KeysEditor({ onSave, initialPublicKey = '', initialPrivateKey = '' }) {
           ${authKeysStoreTypes.map(t => html`
             <label key=${t} class="flex items-center gap-2 cursor-pointer text-sm">
               <input type="radio" name="storeType" value=${t} checked=${storeType === t}
-                onChange=${() => setStoreType(t)} class="accent-blue-500" />
+                onChange=${() => setStoreType(t)} class="accent-amber-500" />
               ${storeTypeLabel[t]}
             </label>
           `)}
@@ -519,7 +519,7 @@ function KeysEditor({ onSave, initialPublicKey = '', initialPrivateKey = '' }) {
 
       <button type="submit"
         disabled=${busy || !name || !publicKey || !privateKey}
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded text-white transition-colors text-sm">
+        class="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-white transition-colors text-sm">
         Save
       </button>
     </form>
@@ -552,7 +552,7 @@ function KeyGenerator({ onSave }) {
         ${['Ed25519', 'RSA'].map(t => html`
           <label key=${t} class="flex items-center gap-2 cursor-pointer text-sm">
             <input type="radio" name="keyType" value=${t} checked=${keyType === t}
-              onChange=${() => setKeyType(t)} disabled=${generating} class="accent-blue-500" />
+              onChange=${() => setKeyType(t)} disabled=${generating} class="accent-amber-500" />
             ${t}
           </label>
         `)}
@@ -565,21 +565,21 @@ function KeyGenerator({ onSave }) {
             ${[2048, 4096].map(b => html`
               <label key=${b} class="flex items-center gap-2 cursor-pointer text-sm">
                 <input type="radio" name="keyBits" value=${b} checked=${keyBits === b}
-                  onChange=${() => setKeyBits(b)} disabled=${generating} class="accent-blue-500" />
+                  onChange=${() => setKeyBits(b)} disabled=${generating} class="accent-amber-500" />
                 ${b}
               </label>
             `)}
           </div>
         </div>
         ${keyBits >= 4096 && html`
-          <div class="border border-blue-700 text-blue-300 rounded p-3 text-sm">
+          <div class="border border-amber-800/50 text-amber-600/80 rounded-sm p-3 text-sm">
             ⚠ It will take about 1 minute or more to generate. Ed25519 is recommended.
           </div>
         `}
       `}
 
       <button type="button" onClick=${generate} disabled=${generating}
-        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded text-white transition-colors flex items-center gap-2 text-sm">
+        class="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-white transition-colors flex items-center gap-2 text-sm">
         ${generating && html`<span class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block"></span>`}
         Generate
       </button>
