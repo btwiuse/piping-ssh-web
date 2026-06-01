@@ -166,10 +166,22 @@ func DoSsh(conn net.Conn, term *Term, options *SSHOptions) error {
 	// Forward SSH agent with enabled keys
 	ag := agent.NewKeyring()
 	for _, k := range options.AuthKeySets {
-		rawKey := k.getRawKey()
-		if rawKey != nil {
-			ag.Add(agent.AddedKey{PrivateKey: rawKey})
+		rawKey, err := ssh.ParseRawPrivateKey([]byte(k.privateKeyStr))
+		if err != nil {
+			if _, ok := err.(*ssh.PassphraseMissingError); ok && k.getPassphrase != nil {
+				passphrase, err := k.getPassphrase()
+				if err != nil {
+					continue
+				}
+				rawKey, err = ssh.ParseRawPrivateKeyWithPassphrase([]byte(k.privateKeyStr), []byte(passphrase))
+				if err != nil {
+					continue
+				}
+			} else {
+				continue
+			}
 		}
+		ag.Add(agent.AddedKey{PrivateKey: rawKey})
 	}
 	if err := agent.ForwardToAgent(client, ag); err != nil {
 		fmt.Println("agent forward error", err)
