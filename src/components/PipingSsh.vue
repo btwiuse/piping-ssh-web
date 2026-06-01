@@ -89,7 +89,7 @@ onMounted(async () => {
 
 async function start() {
   const {Terminal} = await xtermPromise();
-  const term = new Terminal({ cursorBlink: true });
+  const term = new Terminal({ cursorBlink: true, scrollbar: { showScrollbar: false } });
   const fitAddon = new FitAddon();
   const messageChannel = new MessageChannel();
   term.loadAddon(fitAddon);

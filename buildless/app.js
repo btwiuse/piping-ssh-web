@@ -317,7 +317,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
       const { Terminal } = window;
       const { FitAddon }   = window.FitAddon;
 
-      const term     = new Terminal({ cursorBlink: true });
+      const term     = new Terminal({ cursorBlink: true, scrollbar: { showScrollbar: false } });
       const fitAddon = new FitAddon();
       const mc       = new MessageChannel();
 
