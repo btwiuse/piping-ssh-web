@@ -42,7 +42,7 @@ export type GoWasmExported = {
 
 const goPromise = (async () => {
   if (typeof window === 'undefined') {
-    (globalThis as any).importScripts("../wasm_exec.js");
+    (globalThis as any).importScripts(self.location.origin + "/wasm_exec.js");
   } else {
     await new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -61,7 +61,7 @@ export const goWasmExportedPromise: Promise<GoWasmExported> = (async () => {
     (globalThis as any).pipingSshGoExportResolve = resolve;
   });
   // TODO: use the same URL
-  const wasmUrl: string = typeof window === 'undefined' ? "../main.wasm" : "main.wasm";
+  const wasmUrl: string = typeof window === 'undefined' ? self.location.origin + "/main.wasm" : "main.wasm";
   const res = await fetch(wasmUrl);
   const result = await WebAssembly.instantiateStreaming(res, go.importObject);
   go.run(result.instance);
