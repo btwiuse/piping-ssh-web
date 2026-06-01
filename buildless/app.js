@@ -658,69 +658,65 @@ function KeyManager() {
         const addCmd = `mkdir -p ~/.ssh && echo '${k.publicKey.trim()}' >> ~/.ssh/authorized_keys`;
 
         return html`
-          <div key=${fp} class="border border-gray-700 rounded overflow-hidden">
+          <div key=${fp} class="border border-gray-800 rounded-sm overflow-hidden">
             <!-- Header row -->
-            <button type="button"
-              onClick=${() => setExpanded(open ? null : fp)}
-              class="w-full flex items-center gap-3 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-left transition-colors">
-              <span class="text-xl ${edit.enabled ? '' : 'opacity-30'}">🔑</span>
-              <div class="flex-1 min-w-0 ${!edit.enabled ? 'text-gray-500' : ''} ${hasChanged(fp) ? 'italic' : ''}">
-                <div class="font-medium truncate">${edit.name || k.name}</div>
-                <div class="text-xs text-gray-500 font-mono truncate">${fp}</div>
-              </div>
-              <span class="text-gray-500 text-xs">${open ? '▲' : '▼'}</span>
-            </button>
+            <div class="flex items-center gap-3 px-4 py-3 bg-gray-900/50">
+              <button type="button"
+                onClick=${() => setExpanded(open ? null : fp)}
+                class="flex items-center gap-3 flex-1 min-w-0 text-left">
+                <span class="text-base ${k.enabled ? '' : 'opacity-30'}">🔑</span>
+                <div class="flex-1 min-w-0 ${!k.enabled ? 'text-gray-500' : ''}">
+                  <div class="text-sm truncate">${k.name}</div>
+                  <div class="text-xs text-gray-600 font-mono truncate">${fp}</div>
+                </div>
+                <span class="text-gray-600 text-xs flex-shrink-0">${open ? '▲' : '▼'}</span>
+              </button>
+              <!-- Toggle switch (immediate effect) -->
+              <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onClick=${e => e.stopPropagation()}>
+                <input type="checkbox" checked=${k.enabled}
+                  onChange=${e => { updateKey({ ...k, enabled: e.target.checked }); }}
+                  class="sr-only peer" />
+                <div class="w-9 h-5 bg-gray-700 rounded-full transition-colors peer-checked:bg-amber-600"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+              </label>
+            </div>
 
             <!-- Expanded panel -->
             ${open && html`
-              <div class="p-4 bg-gray-900 border-t border-gray-700 space-y-4">
-                <!-- Enabled toggle -->
-                <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked=${edit.enabled}
-                    onChange=${e => patchEdit(fp, { enabled: e.target.checked })}
-                    class="w-4 h-4 accent-blue-500" />
-                  <span class="text-sm">Enabled</span>
-                </label>
+              <div class="p-4 bg-gray-900 border-t border-gray-800 space-y-4">
 
                 <!-- Name -->
                 <div>
-                  <label class="block text-xs text-gray-400 mb-1">Name</label>
+                  <label class="block text-xs text-gray-500 mb-1">Name</label>
                   <input value=${edit.name}
                     onInput=${e => patchEdit(fp, { name: e.target.value })}
-                    class="w-full bg-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
                 </div>
 
                 <!-- Store type -->
                 <div>
-                  <label class="block text-xs text-gray-400 mb-1">Store type</label>
+                  <label class="block text-xs text-gray-500 mb-1">Store type</label>
                   <div class="flex flex-wrap gap-3">
                     ${authKeysStoreTypes.map(t => html`
-                      <label key=${t} class="flex items-center gap-1.5 cursor-pointer text-sm">
+                      <label key=${t} class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400">
                         <input type="radio" name=${'st-' + fp} value=${t} checked=${edit.storeType === t}
-                          onChange=${() => patchEdit(fp, { storeType: t })} class="accent-blue-500" />
+                          onChange=${() => patchEdit(fp, { storeType: t })} class="accent-amber-500" />
                         ${storeTypeLabel[t]}
                       </label>
                     `)}
                   </div>
                 </div>
 
-                <!-- Update button -->
-                <button type="button" onClick=${() => applyUpdate(fp)}
-                  disabled=${!hasChanged(fp)}
-                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 rounded text-xs text-white transition-colors">
-                  Update
-                </button>
-
                 <!-- Public key -->
                 <div>
-                  <label class="block text-xs text-gray-400 mb-1">Public key</label>
+                  <label class="block text-xs text-gray-500 mb-1">Public key</label>
                   <div class="relative">
                     <textarea value=${k.publicKey} readOnly rows="2"
-                      class="w-full bg-gray-700 rounded px-3 py-2 pr-16 text-xs text-white font-mono resize-none"></textarea>
+                      class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 pr-16 text-xs text-white font-mono resize-none"></textarea>
                     <div class="absolute top-1 right-1 flex gap-0.5">
                       <${CopyButton} text=${k.publicKey} />
                       <button type="button" onClick=${() => downloadText(`${k.name}-pub.pem`, k.publicKey)}
-                        title="Download" class="p-1 text-orange-400 hover:text-orange-300 transition-colors rounded">
+                        title="Download" class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       </button>
                     </div>
@@ -729,10 +725,10 @@ function KeyManager() {
 
                 <!-- Add-to-authorized-keys command -->
                 <div>
-                  <label class="block text-xs text-gray-400 mb-1">Command to add to ~/.ssh/authorized_keys</label>
+                  <label class="block text-xs text-gray-500 mb-1">Command to add to ~/.ssh/authorized_keys</label>
                   <div class="relative">
                     <input value=${addCmd} readOnly
-                      class="w-full bg-gray-700 rounded px-3 py-1.5 pr-10 text-xs text-white font-mono" />
+                      class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 pr-10 text-xs text-white font-mono" />
                     <div class="absolute top-0.5 right-1">
                       <${CopyButton} text=${addCmd} />
                     </div>
@@ -742,34 +738,42 @@ function KeyManager() {
                 <!-- Private key -->
                 <div>
                   <div class="flex items-center justify-between mb-1">
-                    <label class="text-xs text-gray-400">Private key</label>
+                    <label class="text-xs text-gray-500">Private key</label>
                     <div class="flex gap-0.5">
                       <${CopyButton} text=${k.privateKey} />
                       <button type="button"
                         onClick=${() => setShowPriv(p => ({ ...p, [fp]: !p[fp] }))}
                         title=${pkShow ? 'Hide' : 'Show'}
-                        class="p-1 text-gray-400 hover:text-white transition-colors rounded">
+                        class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
                         ${pkShow ? '🙈' : '👁'}
                       </button>
                       <button type="button" onClick=${() => downloadText(`${k.name}-priv.pem`, k.privateKey)}
-                        title="Download" class="p-1 text-orange-400 hover:text-orange-300 transition-colors rounded">
+                        title="Download" class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       </button>
                     </div>
                   </div>
                   ${pkShow
                     ? html`<textarea value=${k.privateKey} readOnly rows="5"
-                        class="w-full bg-gray-700 rounded px-3 py-2 text-xs text-white font-mono resize-none"></textarea>`
+                        class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-xs text-white font-mono resize-none"></textarea>`
                     : html`<input type="password" value=${k.privateKey} readOnly
-                        class="w-full bg-gray-700 rounded px-3 py-1.5 text-xs text-white font-mono" />`
+                        class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-xs text-white font-mono" />`
                   }
                 </div>
 
-                <!-- Delete -->
-                <button type="button" onClick=${() => handleDelete(fp)}
-                  class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-xs text-white transition-colors">
-                  🗑 Delete
-                </button>
+                <!-- Actions row -->
+                <div class="flex items-center gap-3 pt-1">
+                  <button type="button" onClick=${() => applyUpdate(fp)}
+                    disabled=${!hasChanged(fp)}
+                    class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-xs text-white transition-colors">
+                    Update
+                  </button>
+                  <div class="flex-1"></div>
+                  <button type="button" onClick=${() => handleDelete(fp)}
+                    class="px-3 py-1.5 text-gray-500 hover:text-red-400 transition-colors text-xs">
+                    Delete
+                  </button>
+                </div>
               </div>
             `}
           </div>
