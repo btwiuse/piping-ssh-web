@@ -938,11 +938,6 @@ function App() {
                     class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
                     ${showMore ? '— Hide options' : '+ More options'}
                   </button>
-                  <div class="flex-1"></div>
-                  <button type="button" onClick=${setConfiguredUrl}
-                    class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                    Set configured URL
-                  </button>
                 </div>
 
                 <!-- More options (collapsible) - below the toggle -->
@@ -997,6 +992,10 @@ function App() {
                         Auto connect
                       </label>
                     </div>
+                  <button type="button" onClick=${setConfiguredUrl}
+                    class="text-xs text-gray-500 hover:text-gray-400 transition-colors w-full text-center border border-gray-300 rounded py-1.5 mt-1">
+                    Generate link
+                  </button>
                   </div>
                 `}
 
