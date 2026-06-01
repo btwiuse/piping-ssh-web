@@ -182,7 +182,7 @@ const includesSshPasswordInFragmentParams = ref<boolean>(fragmentParams.sshPassw
 const autoConnectForFragmentParams = ref<boolean>(fragmentParams.autoConnect() ?? false);
 
 const pipingFullUrl = computed<string>(() => {
-  return `${pipingServerUrl.value}${sshHost.value}:${sshPort.value}`;
+  return new URL(`${sshHost.value}/${sshPort.value}`, pipingServerUrl.value).href;
 });
 
 const formValid = ref(false);
