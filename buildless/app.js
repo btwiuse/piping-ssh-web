@@ -446,7 +446,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
         </div>
       `}
       <div ref=${termRef}
-        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 64px)' }}
+        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 48px)' }}
       ></div>
     </div>
   `;
@@ -875,7 +875,7 @@ function App() {
     showSnackbar({ message: 'URL updated' });
   }
 
-  const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500/50 placeholder-gray-600 transition-colors';
+  const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-4 py-3 text-white text-base focus:outline-none focus:border-amber-500/50 placeholder-gray-600 transition-colors';
 
   return html`
     <div class="min-h-screen flex flex-col">
@@ -907,7 +907,7 @@ function App() {
               onEnd=${() => setConnecting(false)}
             />`
           : html`
-            <div class="max-w-lg mx-auto px-6 pt-12">
+            <div class="max-w-xl mx-auto px-6 pt-12">
 
               ${!supportsStreams && html`
                 <div class="border border-amber-800/50 rounded-sm p-3 mb-8 text-xs text-amber-600/80">
@@ -915,39 +915,52 @@ function App() {
                 </div>
               `}
 
-              <form onSubmit=${e => { e.preventDefault(); connect(); }} class="space-y-5">
+              <form onSubmit=${e => { e.preventDefault(); connect(); }} class="space-y-6">
 
-                <!-- ssh-host / ssh-port (asymmetric) -->
-                <div class="flex gap-3">
+                <!-- username @ host : port -->
+                <div class="flex gap-0 items-center">
+                  <div class="flex-1" style=${{ minWidth: 0 }}>
+                    <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
+                      placeholder="username"
+                      disabled=${!supportsStreams} class=${inputClass} />
+                  </div>
+                  <span style=${{ userSelect: 'none', color: '#52525b', fontSize: '16px', padding: '0 6px', flexShrink: 0 }}>@</span>
                   <div class="flex-1" style=${{ minWidth: 0 }}>
                     <input name="ssh-host" autocomplete="host" value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
                       placeholder="ssh host"
                       disabled=${!supportsStreams} class=${inputClass} />
                   </div>
-                  <div class="w-24 flex-shrink-0">
+                  <span style=${{ userSelect: 'none', color: '#52525b', fontSize: '16px', padding: '0 6px', flexShrink: 0 }}>:</span>
+                  <div class="w-20 flex-shrink-0">
                     <input name="ssh-port" autocomplete="port" value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
                       placeholder="port"
                       disabled=${!supportsStreams} class=${inputClass} />
                   </div>
                 </div>
 
-                <!-- Username -->
-                <div>
-                  <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
-                    placeholder="username"
-                    disabled=${!supportsStreams} class=${inputClass} />
-                </div>
-
                 <!-- Connect button -->
                 <button type="submit"
                   disabled=${!formValid() || !supportsStreams}
-                  class="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-sm text-white font-medium transition-colors tracking-wide">
+                  class="w-full py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-sm text-white font-medium transition-colors tracking-wide">
                   Connect
                 </button>
 
-                <!-- More options (collapsible) -->
+                <!-- Toggle / Set URL (always visible) -->
+                <div class="flex items-center pt-2">
+                  <button type="button" onClick=${() => setShowMore(p => !p)}
+                    class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                    ${showMore ? '— Hide options' : '+ More options'}
+                  </button>
+                  <div class="flex-1"></div>
+                  <button type="button" onClick=${setConfiguredUrl}
+                    class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                    Set configured URL
+                  </button>
+                </div>
+
+                <!-- More options (collapsible) - below the toggle -->
                 ${showMore && html`
-                  <div class="space-y-4 pt-1 border-t border-gray-800/50">
+                  <div class="space-y-4 pt-1">
 
                     <!-- Piping Server URL -->
                     <div>
@@ -1001,19 +1014,6 @@ function App() {
                 `}
 
               </form>
-
-              <!-- Toggle more options / Set configured URL -->
-              <div class="flex items-center mt-5 pt-3 border-t border-gray-800/30">
-                <button type="button" onClick=${() => setShowMore(p => !p)}
-                  class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                  ${showMore ? '— Hide options' : '+ More options'}
-                </button>
-                <div class="flex-1"></div>
-                <button type="button" onClick=${setConfiguredUrl}
-                  class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                  Set configured URL
-                </button>
-              </div>
 
             </div>
           `
