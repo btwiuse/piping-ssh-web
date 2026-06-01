@@ -69,7 +69,7 @@ export const goWasmExportedPromise: Promise<GoWasmExported> = (async () => {
 })();
 
 
-export async function goWasmExisted(): Promise<boolean> {
+export async function goWasmExited(): Promise<boolean> {
   const go = await goPromise;
   return go.exited ?? false;
 }

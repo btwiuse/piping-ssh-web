@@ -9,8 +9,8 @@ function createGoWasmWorkerRemote(): [Comlink.Remote<GoWasmWorkerObject>, Worker
 }
 
 export async function aliveGoWasmWorkerRemotePromise(): Promise<Comlink.Remote<GoWasmWorkerObject>> {
-  // recreate remote if existed
-  if (await goWasmWorkerRemote.existed()) {
+  // recreate remote if exited
+  if (await goWasmWorkerRemote.exited()) {
     worker.terminate();
     console.warn("recreating remote...");
     [goWasmWorkerRemote, worker] = createGoWasmWorkerRemote();

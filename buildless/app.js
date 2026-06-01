@@ -130,7 +130,7 @@ function createWorkerRemote() {
 [workerRemote, currentWorker] = createWorkerRemote();
 
 async function getAliveWorker() {
-  if (await workerRemote.existed()) {
+  if (await workerRemote.exited()) {
     currentWorker.terminate();
     console.warn('[app] recreating WASM worker...');
     [workerRemote, currentWorker] = createWorkerRemote();

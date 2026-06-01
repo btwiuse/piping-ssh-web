@@ -1,6 +1,6 @@
 declare var self: Worker;
 
-import {goWasmExportedPromise, GoWasmExported, goWasmExisted} from "@/go-wasm-exported-promise";
+import {goWasmExportedPromise, GoWasmExported, goWasmExited} from "@/go-wasm-exported-promise";
 import * as Comlink from 'comlink';
 
 // e.g. `(a: number, b: boolean) => string` → `(a: number, b: boolean) => Promise<string>`
@@ -12,12 +12,12 @@ type ToAsyncFunction<T extends (...args: any) => any> =
 export type GoWasmWorkerObject = {
   [P in keyof GoWasmExported]: ToAsyncFunction<GoWasmExported[P]>
 } & {
-  existed(): Promise<boolean>,
+  exited(): Promise<boolean>,
 };
 
 const goWasmWorkerObject: GoWasmWorkerObject = {
-  async existed(): Promise<boolean> {
-    return await goWasmExisted();
+  async exited(): Promise<boolean> {
+    return await goWasmExited();
   },
   async panicOnPurpose(): Promise<void> {
     const exported = await goWasmExportedPromise;
