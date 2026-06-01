@@ -18,12 +18,12 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, ref} from "vue";
-import 'xterm/css/xterm.css';
+import {nextTick, onMounted, ref} from "vue";
+import '@xterm/xterm/css/xterm.css';
 import urlJoin from "url-join";
 import * as Comlink from 'comlink';
 import {mdiCheck, mdiKey, mdiCancel} from "@mdi/js";
-import {FitAddon} from 'xterm-addon-fit';
+import {FitAddon} from '@xterm/addon-fit';
 import type {AuthKeySetForSsh} from "@/go-wasm-exported-promise";
 import {ServerHostKeyManager} from "@/ServerHostKeyManager";
 import {AuthKeySet, storedAuthKeySets} from "@/authKeySets";
@@ -47,7 +47,7 @@ const emit = defineEmits<{
   (event: 'end'): void
 }>();
 
-const xtermPromise = () => import("xterm");
+const xtermPromise = () => import("@xterm/xterm");
 
 const connectionState = ref<"connecting" | "connected">("connecting");
 
@@ -133,19 +133,6 @@ async function start() {
   }
 
   const transport = await new WebSocketStream(props.pipingServerUrl).opened;
-  const originalTermWrite = term.write;
-  // For fitting terminal
-  term.write = (...args: any) => {
-    originalTermWrite.apply(term, args);
-    // Restore original .write()
-    term.write = originalTermWrite;
-    term.focus();
-    // FIXME: fitting several times solves the fitting problem in the first session
-    fitTerminal();
-    fitTerminal();
-    fitTerminal();
-    fitTerminal();
-  };
   const termReadable = new ReadableStream<string>({
     start(ctrl) {
       // NOTE: listener registration in Worker using Comlink does not work
@@ -226,6 +213,10 @@ async function start() {
       },
       onConnected() {
         connectionState.value = "connected";
+        nextTick(() => {
+          fitTerminal();
+          term.focus();
+        });
       },
     }));
     showSnackbar({

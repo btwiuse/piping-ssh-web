@@ -231,8 +231,8 @@ onMounted(() => {
 });
 
 function preloadForUserExperience() {
-  import("xterm");
-  import("xterm-addon-fit");
+  import("@xterm/xterm");
+  import("@xterm/addon-fit");
   import("@/components/PipingSsh.vue");
   import("clipboard-copy");
   import("@/components/KeyManager.vue");
