@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"github.com/mikesmitty/edkey"
 	"golang.org/x/crypto/ssh"
 )
@@ -52,6 +55,44 @@ func generateEd25519Keys() (*GeneratedKeys, error) {
 	privateKeyString := buf.String()
 
 	sshPublicKey, err := ssh.NewPublicKey(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GeneratedKeys{
+		PublicKey:  string(ssh.MarshalAuthorizedKey(sshPublicKey)),
+		PrivateKey: privateKeyString,
+	}, nil
+}
+
+func generateEcdsaKeys(bits int) (*GeneratedKeys, error) {
+	var curve elliptic.Curve
+	switch bits {
+	case 256:
+		curve = elliptic.P256()
+	case 384:
+		curve = elliptic.P384()
+	case 521:
+		curve = elliptic.P521()
+	default:
+		return nil, fmt.Errorf("unsupported ECDSA key bits: %d", bits)
+	}
+	privateKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	privateKeyBytes, err := x509.MarshalECPrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+	privateKeyBlock := pem.Block{Type: "EC PRIVATE KEY", Bytes: privateKeyBytes}
+	var buf bytes.Buffer
+	if err := pem.Encode(&buf, &privateKeyBlock); err != nil {
+		return nil, err
+	}
+	privateKeyString := buf.String()
+
+	sshPublicKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		return nil, err
 	}

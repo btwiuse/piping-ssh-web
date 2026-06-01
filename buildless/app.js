@@ -191,6 +191,7 @@ const workerGetFingerprint        = pk  => getAliveWorker().then(r => r.sshSha25
 const workerIsEncrypted           = pk  => getAliveWorker().then(r => r.sshPrivateKeyIsEncrypted(pk));
 const workerGenerateRsa           = b   => getAliveWorker().then(r => r.generateRsaKeys(b));
 const workerGenerateEd25519       = ()  => getAliveWorker().then(r => r.generateEd25519Keys());
+const workerGenerateEcdsa         = b   => getAliveWorker().then(r => r.generateEcdsaKeys(b));
 
 async function storeAuthKeySet({ name, publicKey, privateKey, storeType }) {
   const fp = await workerGetFingerprint(publicKey);
@@ -580,6 +581,7 @@ function KeysEditor({ onSave, initialPublicKey = '', initialPrivateKey = '' }) {
 function KeyGenerator({ onSave }) {
   const [keyType,    setKeyType]    = useState('Ed25519');
   const [keyBits,    setKeyBits]    = useState(2048);
+  const [ecdsaBits,  setEcdsaBits]  = useState(256);
   const [generating, setGenerating] = useState(false);
   const [generated,  setGenerated]  = useState(null);
 
@@ -590,15 +592,24 @@ function KeyGenerator({ onSave }) {
   async function generate() {
     setGenerating(true);
     try {
-      const keys = keyType === 'RSA' ? await workerGenerateRsa(keyBits) : await workerGenerateEd25519();
+      let keys;
+      if (keyType === 'RSA')             keys = await workerGenerateRsa(keyBits);
+      else if (keyType === 'ECDSA')      keys = await workerGenerateEcdsa(ecdsaBits);
+      else                               keys = await workerGenerateEd25519();
       setGenerated(keys);
     } finally { setGenerating(false); }
   }
 
+  const ecdsaCurves = [
+    { bits: 256, label: 'NIST P-256', bitsLabel: '256 bits' },
+    { bits: 384, label: 'NIST P-384', bitsLabel: '384 bits' },
+    { bits: 521, label: 'NIST P-521', bitsLabel: '521 bits' },
+  ];
+
   return html`
     <div class="space-y-4">
       <div class="flex gap-4">
-        ${['Ed25519', 'RSA'].map(t => html`
+        ${['Ed25519', 'ECDSA', 'RSA'].map(t => html`
           <label key=${t} class="flex items-center gap-2 cursor-pointer text-sm">
             <input type="radio" name="keyType" value=${t} checked=${keyType === t}
               onChange=${() => setKeyType(t)} disabled=${generating} class="accent-amber-500" />
@@ -606,6 +617,20 @@ function KeyGenerator({ onSave }) {
           </label>
         `)}
       </div>
+
+      ${keyType === 'ECDSA' && html`
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">Curve</label>
+          ${ecdsaCurves.map(c => html`
+            <label key=${c.bits} class="flex items-center gap-2 cursor-pointer text-sm py-1.5">
+              <input type="radio" name="ecdsaCurve" checked=${ecdsaBits === c.bits}
+                onChange=${() => setEcdsaBits(c.bits)} disabled=${generating} class="accent-amber-500" />
+              <span class="text-gray-200">${c.label}</span>
+              <span class="text-gray-500 text-xs ml-1">— ${c.bitsLabel}</span>
+            </label>
+          `)}
+        </div>
+      `}
 
       ${keyType === 'RSA' && html`
         <div>

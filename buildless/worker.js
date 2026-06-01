@@ -47,6 +47,10 @@ const workerApi = {
     const exported = await exportedPromise;
     return exported.generateEd25519Keys();
   },
+  async generateEcdsaKeys(bits) {
+    const exported = await exportedPromise;
+    return exported.generateEcdsaKeys(bits);
+  },
   async sshSha256Fingerprint(publicKey) {
     const exported = await exportedPromise;
     return exported.sshSha256Fingerprint(publicKey);

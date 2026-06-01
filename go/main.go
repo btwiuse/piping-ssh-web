@@ -44,6 +44,17 @@ func main() {
 				"privateKey": keys.PrivateKey,
 			}
 		}),
+		"generateEcdsaKeys": js.FuncOf(func(this js.Value, args []js.Value) any {
+			bits := args[0].Int()
+			keys, err := generateEcdsaKeys(bits)
+			if err != nil {
+				return jsutil.NewError(err)
+			}
+			return map[string]any{
+				"publicKey":  keys.PublicKey,
+				"privateKey": keys.PrivateKey,
+			}
+		}),
 		"sshSha256Fingerprint": js.FuncOf(func(this js.Value, args []js.Value) any {
 			publicKeyString := args[0].String()
 			publicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(publicKeyString))
