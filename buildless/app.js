@@ -166,7 +166,7 @@ async function checkSupportsRequestStreams() {
 let _promptResolve = null;
 let _setPromptState = null;
 
-function showPrompt({ title, message = '', showsInput = true, inputType = 'text', placeholder = '', width = '60vw' }) {
+function showPrompt({ title, message = '', showsInput = true, inputType = 'text', placeholder = '', width = '24rem' }) {
   return new Promise(resolve => {
     _promptResolve = resolve;
     _setPromptState?.({ shows: true, title, message, showsInput, inputType, placeholder, width });
@@ -174,7 +174,7 @@ function showPrompt({ title, message = '', showsInput = true, inputType = 'text'
 }
 
 function GlobalPrompt() {
-  const [st, setSt] = useState({ shows: false, title: '', message: '', showsInput: true, inputType: 'text', placeholder: '', width: '60vw' });
+  const [st, setSt] = useState({ shows: false, title: '', message: '', showsInput: true, inputType: 'text', placeholder: '', width: '24rem' });
   const [text, setText] = useState('');
   const [showPw, setShowPw] = useState(false);
   const inputRef = useRef(null);
@@ -210,11 +210,11 @@ function GlobalPrompt() {
               onInput=${e => setText(e.target.value)}
               onKeyDown=${e => e.key === 'Enter' && ok()}
               placeholder=${st.placeholder}
-              class="w-full bg-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${isPw ? 'pr-10' : ''}"
+              class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600 transition-colors ${isPw ? 'pr-10' : ''}"
             />
             ${isPw && html`
               <button type="button" onClick=${() => setShowPw(p => !p)}
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1">
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 p-1">
                 ${showPw ? '🙈' : '👁'}
               </button>
             `}
@@ -377,7 +377,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
             async onPasswordAuth() {
               if (!pwTried && defaultSshPassword !== undefined) { pwTried = true; return defaultSshPassword; }
               const msg = pwTried ? 'try again.' : '';
-              const pw  = await showPrompt({ title: 'Password', message: msg, inputType: 'password', width: '60vw' });
+              const pw  = await showPrompt({ title: 'Password', message: msg, inputType: 'password' });
               if (pw === undefined) { localCancelled = true; throw new Error('aborted'); }
               pwTried = true;
               return pw;
@@ -390,7 +390,6 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
                 title:     'Passphrase',
                 message:   `(${k.name}) ${type}\nEnter passphrase for key`,
                 inputType: 'password',
-                width:     '60vw',
               });
               if (pp === undefined) { localCancelled = true; throw new Error('aborted'); }
               return pp;
@@ -407,7 +406,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, onEnd }) {
                 title:       'New host',
                 message:     `${key.type} key fingerprint is ${key.fingerprint}\nAre you sure you want to continue connecting?`,
                 placeholder: 'yes/no/[fingerprint]',
-                width:       '60vw',
+                width:       '28rem',
               });
               if (ans === 'yes' || ans === key.fingerprint) {
                 serverHostKeyMgr.trust(key.fingerprint);
