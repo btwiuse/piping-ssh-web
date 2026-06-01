@@ -30,7 +30,7 @@ const exportedPromise = new Promise((resolve) => {
 })();
 
 const workerApi = {
-  async existed() {
+  async exited() {
     return goExited;
   },
   async doSsh(params, functions) {

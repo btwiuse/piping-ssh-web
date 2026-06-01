@@ -21,6 +21,7 @@ function urlJoin(base, ...parts) {
 }
 
 function randomString(len) {
+  // Unambiguous characters only (no 0/O, 1/l/I, etc.)
   const chars = 'abcdefhijkmnprstuvwxyz234568'.split('');
   const arr = window.crypto.getRandomValues(new Uint32Array(len));
   return Array.from(arr, n => chars[n % chars.length]).join('');
@@ -171,7 +172,7 @@ function createWorkerRemote() {
 [workerRemote, currentWorker] = createWorkerRemote();
 
 async function getAliveWorker() {
-  if (await workerRemote.existed()) {
+  if (await workerRemote.exited()) {
     currentWorker.terminate();
     console.warn('[app] recreating WASM worker...');
     [workerRemote, currentWorker] = createWorkerRemote();
@@ -384,6 +385,8 @@ function PipingSsh({ pipingServerUrl, pipingServerHeaders, csPath, scPath, usern
           fittedOnce = true;
           term.write  = origWrite;
           term.focus();
+          // Fit multiple times: first output may arrive before the container has
+          // its final layout, so extra fits ensure the terminal size is correct.
           fit(); fit(); fit(); fit();
         }
       };
