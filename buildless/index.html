@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Piping SSH</title>
+
+  <!-- xterm.js from CDN -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6/css/xterm.css"
+  />
+  <script
+    src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.1.0-beta.216/lib/xterm.js"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.12.0-beta.216/lib/addon-fit.js"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/@xterm/addon-image@0.10.0-beta.216/lib/addon-image.js"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.20.0-beta.215/lib/addon-webgl.js"
+  ></script>
+
+  <!-- Tailwind CSS (play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'gray-750': '#2d3748',
+            'gray-850': '#1a202c',
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- ES Module import map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react":            "https://esm.sh/react@19",
+      "react-dom/client": "https://esm.sh/react-dom@19/client",
+      "htm":              "https://esm.sh/htm@3",
+      "comlink":          "https://esm.sh/comlink@4"
+    }
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; }
+    /* keep xterm scrollbar from doubling */
+    .xterm-viewport { overflow-y: hidden !important; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+  <div id="app"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
