@@ -107,6 +107,54 @@ function removeKey(fp) {
 
 function updateKey(k) { removeKey(k.sha256Fingerprint); _addKey(k); }
 
+// ─── Host presets store ─────────────────────────────────────────────────────
+
+const presetHosts = [
+  { name: 'Telehack',         hostname: 'telehack.com',  port: '22', username: '', password: '' },
+  { name: 'Charm Cloud',     hostname: 'git.charm.sh',  port: '22', username: '', password: '' },
+  { name: 'Bitreich',        hostname: 'bitreich.org',  port: '22', username: '', password: '' },
+  { name: 'Terminal.Shop',   hostname: 'terminal.shop', port: '22', username: '', password: '' },
+];
+
+const HOSTS_STORAGE_KEY = 'preset_hosts';
+const hostSubscribers = new Set();
+
+function getStoredHosts() {
+  try { return JSON.parse(localStorage.getItem(HOSTS_STORAGE_KEY) || 'null') ?? [...presetHosts]; }
+  catch { return [...presetHosts]; }
+}
+
+function notifyHostSubscribers() { hostSubscribers.forEach(fn => fn([...getStoredHosts()])); }
+
+function useStoredHosts() {
+  const [hosts, setHosts] = useState(getStoredHosts);
+  useEffect(() => { hostSubscribers.add(setHosts); return () => hostSubscribers.delete(setHosts); }, []);
+  return hosts;
+}
+
+function persistHosts(hosts) {
+  localStorage.setItem(HOSTS_STORAGE_KEY, JSON.stringify(hosts));
+  notifyHostSubscribers();
+}
+
+function addHost(h) {
+  const hosts = getStoredHosts();
+  hosts.push({ ...h, addedAtMillis: Date.now() });
+  persistHosts(hosts);
+}
+
+function removeHost(idx) {
+  const hosts = getStoredHosts();
+  hosts.splice(idx, 1);
+  persistHosts(hosts);
+}
+
+function updateHost(idx, h) {
+  const hosts = getStoredHosts();
+  hosts[idx] = h;
+  persistHosts(hosts);
+}
+
 // ─── Server host key manager ──────────────────────────────────────────────────
 
 const serverHostKeyMgr = {
@@ -741,6 +789,111 @@ function KeyManager() {
   `;
 }
 
+// ─── HostManager ─────────────────────────────────────────────────────────────
+
+function HostManager({ onConnect }) {
+  const hosts = useStoredHosts();
+  const [expanded, setExpanded] = useState(null);
+  const [edits, setEdits] = useState({});
+
+  async function handleDelete(idx) {
+    const ans = await showPrompt({ title: 'Remove host?', message: 'Are you sure to remove the host?', showsInput: false });
+    if (ans === undefined) return;
+    setExpanded(null);
+    removeHost(idx);
+  }
+
+  const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600';
+
+  if (hosts.length === 0) return html`
+    <p class="text-gray-500 text-center py-10">No hosts stored yet.</p>
+  `;
+
+  return html`
+    <div class="space-y-2">
+      ${hosts.map((h, idx) => {
+        const open = expanded === idx;
+
+        return html`
+          <div key=${idx} class="border border-gray-800 rounded-sm overflow-hidden">
+            <!-- Header row -->
+            <div class="flex items-center gap-3 px-4 py-3 bg-gray-900/50">
+              <button type="button"
+                onClick=${() => setExpanded(open ? null : idx)}
+                class="flex items-center gap-3 flex-1 min-w-0 text-left">
+                <span class="text-base">🖥</span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm truncate">${h.name}</div>
+                  <div class="text-xs text-gray-600 font-mono truncate">${h.username}@${h.hostname}:${h.port}</div>
+                </div>
+                <span class="text-gray-600 text-xs flex-shrink-0">${open ? '▲' : '▼'}</span>
+              </button>
+              <!-- Connect button -->
+              <button type="button" onClick=${() => onConnect(h)}
+                class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-xs text-white transition-colors flex-shrink-0">
+                Connect
+              </button>
+            </div>
+
+            <!-- Expanded panel -->
+            ${open && html`
+              <div class="p-4 bg-gray-900 border-t border-gray-800 space-y-4">
+                <!-- Name -->
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Name</label>
+                  <input value=${h.name}
+                    onInput=${e => { const h2 = { ...h, name: e.target.value }; updateHost(idx, h2); }}
+                    class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+
+                <!-- Hostname -->
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Hostname</label>
+                  <input value=${h.hostname}
+                    onInput=${e => { const h2 = { ...h, hostname: e.target.value }; updateHost(idx, h2); }}
+                    class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50 font-mono" />
+                </div>
+
+                <!-- Port -->
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Port</label>
+                  <input value=${h.port}
+                    onInput=${e => { const h2 = { ...h, port: e.target.value }; updateHost(idx, h2); }}
+                    class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+
+                <!-- Username -->
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Username</label>
+                  <input value=${h.username}
+                    onInput=${e => { const h2 = { ...h, username: e.target.value }; updateHost(idx, h2); }}
+                    class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+
+                <!-- Password -->
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Password</label>
+                  <input type="password" value=${h.password}
+                    onInput=${e => { const h2 = { ...h, password: e.target.value }; updateHost(idx, h2); }}
+                    class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+
+                <!-- Delete -->
+                <div class="flex justify-end pt-1">
+                  <button type="button" onClick=${() => handleDelete(idx)}
+                    class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-xs text-white transition-colors">
+                    🗑 Delete
+                  </button>
+                </div>
+              </div>
+            `}
+          </div>
+        `;
+      })}
+    </div>
+  `;
+}
+
 // ─── Dialog wrapper ───────────────────────────────────────────────────────────
 
 const dialogStack = [];
@@ -811,6 +964,8 @@ function App() {
   const [keyMgrOpen,        setKeyMgrOpen]        = useState(false);
   const [newKeyOpen,        setNewKeyOpen]        = useState(false);
   const [genKeyOpen,        setGenKeyOpen]        = useState(false);
+  const [hostMgrOpen,       setHostMgrOpen]       = useState(false);
+  const [connectOpts,       setConnectOpts]       = useState(null);
 
   // Persist form state to sessionStorage
   useEffect(() => {
@@ -821,17 +976,23 @@ function App() {
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
 
+  // Connection params: use connectOpts (from Hosts) when set, otherwise form values
+  const connHost = connectOpts?.hostname ?? sshHost;
+  const connPort = connectOpts?.port ?? sshPort;
+  const connUser = connectOpts?.username ?? username;
+  const connPw   = connectOpts?.password !== undefined ? connectOpts.password : effectiveSshPassword;
+
   // Full URL with host/port as query params
   const pipingFullUrl = useMemo(() => {
     try {
       const url = new URL(pipingServerUrl);
-      url.searchParams.set('hostname', sshHost);
-      url.searchParams.set('port', sshPort);
+      url.searchParams.set('hostname', connHost);
+      url.searchParams.set('port', connPort);
       return url.href;
     } catch {
       return '';
     }
-  }, [pipingServerUrl, sshHost, sshPort]);
+  }, [pipingServerUrl, connHost, connPort]);
 
   useEffect(() => {
     checkSupportsRequestStreams().then(s => setSupportsStreams(s));
@@ -841,7 +1002,22 @@ function App() {
     if (fragmentParams.autoConnect()) connect();
   }, []); // eslint-disable-line
 
-  function connect() { setConnecting(true); }
+  function connect(host) {
+    if (host) {
+      setConnectOpts(host);
+      setHostMgrOpen(false);
+    } else {
+      setConnectOpts(null);
+      // Save to host presets
+      const hosts = getStoredHosts();
+      const idx   = hosts.findIndex(h => h.hostname === sshHost && h.port === sshPort && h.username === username);
+      const entry = { name: `${username}@${sshHost}`, hostname: sshHost, port: sshPort, username, password: sshPassword, addedAtMillis: Date.now() };
+      if (idx !== -1) { hosts[idx] = entry; }
+      else            { hosts.push(entry); }
+      persistHosts(hosts);
+    }
+    setConnecting(true);
+  }
 
   function formValid() {
     return !!(pipingServerUrl && sshHost && sshPort && username);
@@ -873,8 +1049,14 @@ function App() {
         <a href="" onClick=${e => { e.preventDefault(); setConnecting(false); window.scrollTo(0, 0); }} class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
 
         <button type="button" onClick=${() => setKeyMgrOpen(true)}
-          class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+          class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2.5 py-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           Keys
+        </button>
+        <button type="button" onClick=${() => setHostMgrOpen(true)}
+          class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2.5 py-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          Hosts
         </button>
 
         <a href="https://github.com/nwtgck/piping-ssh-web" target="_blank" rel="noopener"
@@ -890,9 +1072,9 @@ function App() {
         ${connecting
           ? html`<${PipingSsh}
               pipingServerUrl=${pipingFullUrl}
-              username=${username}
-              defaultSshPassword=${effectiveSshPassword}
-              onEnd=${() => setConnecting(false)}
+              username=${connUser}
+              defaultSshPassword=${connPw}
+              onEnd=${() => { setConnecting(false); setConnectOpts(null); }}
             />`
           : html`
             <div class="max-w-xl mx-auto px-6 pt-12">
@@ -1034,6 +1216,11 @@ function App() {
       <!-- Generate key dialog -->
       <${Dialog} title="Key generator" open=${genKeyOpen} onClose=${() => setGenKeyOpen(false)}>
         <${KeyGenerator} onSave=${handleSaveKey} />
+      <//>
+
+      <!-- Hosts dialog -->
+      <${Dialog} title="Hosts" open=${hostMgrOpen} onClose=${() => setHostMgrOpen(false)} wide=${true}>
+        <${HostManager} onConnect=${connect} />
       <//>
     </div>
   `;
