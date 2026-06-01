@@ -45,23 +45,12 @@
                 </v-row>
                 <v-text-field label="user name" v-model="username" required variant="solo-filled" :rules="createRequiredRules('user name')"></v-text-field>
 
+                <v-btn type="submit" :disabled="!formValid || !supportsRequestStreams" block class="mt-8" color="secondary">
+                  Connect
+                </v-btn>
+
                 <template v-if="showsMoreOptions">
                   <v-combobox label="Piping Server" v-model="pipingServerUrl" :items="pipingServerUrls" required variant="solo-filled" :rules="createRequiredRules('Piping Server')"></v-combobox>
-                  <!-- HTTP header inputs -->
-                  <v-row v-for="(header, idx) in editingPipingServerHeaders">
-                    <v-col>
-                      <v-text-field v-model="header[0]" :label="`HTTP header name ${idx + 1}`" variant="solo-filled"></v-text-field>
-                    </v-col>
-                    <v-col>
-                      <v-text-field v-model="header[1]" :label="`HTTP header value ${idx + 1}`" variant="solo-filled"></v-text-field>
-                    </v-col>
-                    <v-col>
-                      <v-btn :icon="mdiMinus" @click="editingPipingServerHeaders.splice(idx, 1)" variant="text"></v-btn>
-                    </v-col>
-                  </v-row>
-                  <v-btn @click="editingPipingServerHeaders.push(['', ''])" :prepend-icon="mdiPlus" variant="outlined" style="margin-bottom: 1rem; text-transform: none">
-                    Add header
-                  </v-btn>
 
                   <v-text-field v-model="editingSshPassword" label="SSH password" :type="showsSshPassword ? 'text' : 'password'" variant="solo-filled">
                     <template v-slot:append-inner>
@@ -73,18 +62,19 @@
                   <v-checkbox v-model="autoConnectForFragmentParams" label="Auto connect for configured URL"></v-checkbox>
                 </template>
 
-                <v-btn type="submit" :disabled="!formValid || !supportsRequestStreams" block class="mt-8" color="secondary">
-                  Connect
-                </v-btn>
-
-                <v-btn @click="showsMoreOptions = !showsMoreOptions" :prepend-icon="showsMoreOptions ? mdiCollapseAll : mdiExpandAll" variant="text" style="margin-top: 1.2rem; text-transform: none">
-                  {{ showsMoreOptions ? "Hide options" : "More options" }}
-                </v-btn>
+                <v-row>
+                  <v-col>
+                    <v-btn @click="showsMoreOptions = !showsMoreOptions" :prepend-icon="showsMoreOptions ? mdiCollapseAll : mdiExpandAll" variant="text" style="margin-top: 1.2rem; text-transform: none">
+                      {{ showsMoreOptions ? "Hide options" : "More options" }}
+                    </v-btn>
+                  </v-col>
+                  <v-col class="text-right">
+                    <v-btn color="grey" @click="setConfiguredUrl()" :prepend-icon="mdiFire" variant="outlined" style="margin-top: 1.2rem; text-transform: none">
+                      Set configured URL
+                    </v-btn>
+                  </v-col>
+                </v-row>
               </v-form>
-
-              <v-btn color="grey" @click="setConfiguredUrl()" :prepend-icon="mdiFire" variant="outlined" style="text-transform: none">
-                Set configured URL
-              </v-btn>
             </v-sheet>
           </v-col>
         </v-row>
@@ -92,7 +82,6 @@
 
       <PipingSsh v-if="connecting"
                  :piping-server-url="pipingFullUrl"
-                 :piping-server-headers="pipingServerHeaders"
                  :default-ssh-password="sshPassword"
                  :username="username"
                  @end="connecting = false"
@@ -155,7 +144,7 @@
 <script setup lang="ts">
 import {computed, onMounted, ref, defineAsyncComponent} from "vue";
 import {fragmentParams, getConfiguredUrl} from "@/fragment-params";
-import {mdiConsoleLine, mdiKey, mdiPlus, mdiAutoFix, mdiGithub, mdiClose, mdiFire, mdiCollapseAll, mdiExpandAll, mdiMinus, mdiEyeOff, mdiEye, mdiAlertCircle} from "@mdi/js";
+import {mdiConsoleLine, mdiKey, mdiPlus, mdiAutoFix, mdiGithub, mdiClose, mdiFire, mdiCollapseAll, mdiExpandAll, mdiEyeOff, mdiEye, mdiAlertCircle} from "@mdi/js";
 import {AuthKeySet, storeAuthKeySet} from "@/authKeySets";
 import {createRequiredRules} from "@/createRequiredRules";
 import DialogsForGlobal from "@/components/Globals/Globals.vue";
@@ -175,10 +164,6 @@ const pipingServerUrl = ref<string>(fragmentParams.pipingServerUrl() ?? demoBase
 const pipingServerUrls = ref<string[]>([
   demoBaseUrl,
 ]);
-const editingPipingServerHeaders = ref<Array<[string, string]>>(fragmentParams.pipingServerHeaders() ?? []);
-const pipingServerHeaders = computed<Array<[string, string]>>(() => {
-  return editingPipingServerHeaders.value.filter(([name,value]) => name !== "");
-});
 const sshHost = ref<string>(fragmentParams.sshHost() ?? "terminal.shop");
 const sshPort = ref<string>(fragmentParams.sshPort() ?? "22");
 const username = ref<string>(fragmentParams.sshUsername() ?? "");
@@ -240,7 +225,6 @@ async function saveAuthKeySet(authKeySet: AuthKeySet) {
 function setConfiguredUrl() {
   location.href = getConfiguredUrl({
     pipingServerUrl: pipingServerUrl.value,
-    pipingServerHeaders: pipingServerHeaders.value,
     sshHost: sshHost.value,
     sshPort: sshPort.value,
     sshUsername: username.value,

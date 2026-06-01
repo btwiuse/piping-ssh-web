@@ -26,7 +26,6 @@ import {showSnackbar} from "@/components/Globals/snackbar/global-snackbar";
 
 const props = defineProps<{
   pipingServerUrl: string,
-  pipingServerHeaders: Array<[string, string]>,
   username: string,
   defaultSshPassword: string | undefined,
 }>();

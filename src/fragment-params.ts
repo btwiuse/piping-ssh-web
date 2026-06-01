@@ -1,10 +1,5 @@
-import {z} from "zod";
-
-const headersType = z.array(z.tuple([z.string(), z.string()]));
-
 const paramNames = {
   pipingServerUrl: "server",
-  pipingServerHeaders: "headers",
   sshHost: "host",
   sshPort: "port",
   sshUsername: "user",
@@ -15,23 +10,6 @@ const paramNames = {
 export const fragmentParams = {
   pipingServerUrl(): string | undefined {
     return parseFragmentParams().get(paramNames.pipingServerUrl) ?? undefined;
-  },
-  pipingServerHeaders(): Array<[string, string]> | undefined {
-    const headersString = parseFragmentParams().get(paramNames.pipingServerHeaders);
-    if (headersString === null) {
-      return undefined;
-    }
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(decodeURIComponent(headersString));
-    } catch {
-      return undefined;
-    }
-    const parsed = headersType.safeParse(decoded);
-    if (!parsed.success) {
-      return undefined;
-    }
-    return parsed.data;
   },
   sshHost(): string | undefined {
     return parseFragmentParams().get(paramNames.sshHost) ?? undefined;
@@ -53,13 +31,10 @@ export const fragmentParams = {
 
 type SetFragmentParams = { [K in keyof (typeof fragmentParams) ]: ReturnType<(typeof fragmentParams)[K]> }
 
-export function getConfiguredUrl({ pipingServerUrl, pipingServerHeaders, sshHost, sshPort, sshUsername, sshPassword, autoConnect }: SetFragmentParams): string {
+export function getConfiguredUrl({ pipingServerUrl, sshHost, sshPort, sshUsername, sshPassword, autoConnect }: SetFragmentParams): string {
   const searchParams = new URLSearchParams();
   if (pipingServerUrl !== undefined) {
     searchParams.set(paramNames.pipingServerUrl, pipingServerUrl);
-  }
-  if (pipingServerHeaders !== undefined && pipingServerHeaders.length !== 0) {
-    searchParams.set(paramNames.pipingServerHeaders, JSON.stringify(pipingServerHeaders));
   }
   if (sshHost !== undefined) {
     searchParams.set(paramNames.sshHost, sshHost);
