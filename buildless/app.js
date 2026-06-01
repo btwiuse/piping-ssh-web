@@ -835,10 +835,14 @@ function App() {
 
   // Full URL with host/port as query params
   const pipingFullUrl = useMemo(() => {
-    const url = new URL(pipingServerUrl);
-    url.searchParams.set('hostname', sshHost);
-    url.searchParams.set('port', sshPort);
-    return url.href;
+    try {
+      const url = new URL(pipingServerUrl);
+      url.searchParams.set('hostname', sshHost);
+      url.searchParams.set('port', sshPort);
+      return url.href;
+    } catch {
+      return '';
+    }
   }, [pipingServerUrl, sshHost, sshPort]);
 
   useEffect(() => {
@@ -928,12 +932,12 @@ function App() {
                   <div class="grid grid-cols-2 gap-3">
                     <div>
                       <label class="block text-sm text-gray-400 mb-1">SSH server host</label>
-                      <input value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
+                      <input name="ssh-host" autocomplete="host" value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
                         disabled=${!supportsStreams} class=${inputClass} />
                     </div>
                     <div>
                       <label class="block text-sm text-gray-400 mb-1">SSH server port</label>
-                      <input value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
+                      <input name="ssh-port" autocomplete="port" value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
                         disabled=${!supportsStreams} class=${inputClass} />
                     </div>
                   </div>
@@ -941,7 +945,7 @@ function App() {
                   <!-- Username -->
                   <div class="mb-4">
                     <label class="block text-sm text-gray-400 mb-1">user name</label>
-                    <input value=${username} onInput=${e => setUsername(e.target.value)} required
+                    <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
                       disabled=${!supportsStreams} class=${inputClass} />
                   </div>
 
