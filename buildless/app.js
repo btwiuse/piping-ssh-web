@@ -2,7 +2,7 @@
 // Piping SSH — buildless React 19 frontend.
 // Uses htm for JSX-like templates and Comlink for the WASM worker.
 
-import { createElement as h, useState, useEffect, useRef, useMemo, Fragment } from 'react';
+import { createElement as h, useState, useEffect, useRef, Fragment } from 'react';
 import { createRoot } from 'react-dom/client';
 import htm from 'htm';
 import * as Comlink from 'comlink';
@@ -116,7 +116,7 @@ const presetHosts = [
   { name: 'Terminal.Shop',   hostname: 'terminal.shop', port: '22', username: '', password: '', agentForwarding: false },
   { name: 'Whoami',          hostname: 'whoami.filippo.io', port: '22', username: '', password: '', agentForwarding: false },
   { name: 'Pwnable.kr',      hostname: 'pwnable.kr',    port: '2222', username: 'fd', password: 'guest', agentForwarding: false },
-  { name: 'Exe.dev',         hostname: 'exe.dev',      port: '22', username: '', password: '', agentForwarding: false },
+  { name: 'Exe.dev',         hostname: 'exe.dev',      port: '22', username: 'root', password: '', agentForwarding: false },
   { name: 'SDF (menu)',     hostname: 'tty.sdf.org',  port: '22', username: 'menu', password: '', agentForwarding: false },
   { name: 'SDF (new)',      hostname: 'sdf.org',      port: '22', username: 'new', password: '', agentForwarding: false },
   { name: 'Tilde.Town',     hostname: 'tilde.town',   port: '22', username: 'welcome', password: '', agentForwarding: false },
@@ -323,7 +323,7 @@ function GlobalSnackbar() {
   if (!st.shows) return null;
 
   return html`
-    <div class="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 border border-amber-600/60 text-amber-300 px-5 py-3 z-50 text-sm whitespace-nowrap rounded shadow-lg shadow-amber-900/20 font-medium">
+    <div class="fixed top-12 left-1/2 -translate-x-1/2 bg-gray-900 border border-amber-600/60 text-amber-300 px-5 py-3 z-50 text-sm whitespace-nowrap rounded shadow-lg shadow-amber-900/20 font-medium">
       ${st.message}
     </div>
   `;
@@ -361,22 +361,22 @@ function CopyButton({ text }) {
 
 // ─── PipingSsh (terminal view) ────────────────────────────────────────────────
 
-function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd }) {
+function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd, onConnected, isActive = true }) {
   const termRef  = useRef(null);
   const fitRef   = useRef(null);
   const termApi  = useRef(null);
   const [connState, setConnState] = useState('connecting');
 
-  // Fit terminal after DOM layout is committed (terminal div visible)
+  // Fit/focus terminal when this tab becomes active
   useEffect(() => {
-    if (connState !== 'connected') return;
+    if (!isActive || connState !== 'connected') return;
     const raf1 = requestAnimationFrame(() => {
       fitRef.current?.();
       termApi.current?.focus();
       requestAnimationFrame(() => fitRef.current?.());
     });
     return () => cancelAnimationFrame(raf1);
-  }, [connState]);
+  }, [isActive, connState]);
 
   useEffect(() => {
     let localCancelled = false;
@@ -520,6 +520,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
 
             onConnected() {
               setConnState('connected');
+              onConnected?.();
             },
           }),
         );
@@ -530,7 +531,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         else { console.error('SSH error', e); showSnackbar({ message: `Connection closed: ${e.message || e}`, icon: '!' }); }
       } finally {
         window.removeEventListener('resize', fit);
-        if (localCancelled) onEnd();
+        onEnd?.();
       }
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -547,7 +548,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         </div>
       `}
       <div ref=${termRef}
-        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 48px)' }}
+        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 28px)' }}
       ></div>
     </div>
   `;
@@ -868,7 +869,7 @@ function KeyManager() {
 
 // ─── HostManager ─────────────────────────────────────────────────────────────
 
-function HostManager({ onConnect, activeHost, onDisconnect }) {
+function HostManager({ onConnect, connections, onDisconnect }) {
   const hosts = useStoredHosts();
   const [expanded, setExpanded] = useState(null);
   const [edits, setEdits] = useState({});
@@ -881,7 +882,9 @@ function HostManager({ onConnect, activeHost, onDisconnect }) {
   }
 
   function isActiveHost(h) {
-    return activeHost && activeHost.hostname === h.hostname && activeHost.port === h.port && activeHost.username === h.username;
+    return connections.some(c =>
+      c.hostname === h.hostname && c.port === h.port && c.username === h.username && (c.status === 'connected' || c.status === 'connecting')
+    );
   }
 
   const inputClass = 'w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600';
@@ -912,7 +915,7 @@ function HostManager({ onConnect, activeHost, onDisconnect }) {
               </button>
               <!-- Connect / Disconnect button -->
               ${active
-                ? html`<button type="button" onClick=${onDisconnect}
+                ? html`<button type="button" onClick=${() => onDisconnect(h)}
                     class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-xs text-white transition-colors flex-shrink-0 w-28 text-center">
                     Disconnect
                   </button>`
@@ -1019,7 +1022,7 @@ function Dialog({ title, open, onClose, children, wide = false }) {
     <div class="fixed inset-0 bg-black/60 flex items-start justify-center z-30 p-4 overflow-y-auto"
          onClick=${onClose}>
       <div class="bg-gray-900 border border-gray-800 my-4 flex flex-col"
-           style=${{ width: wide ? '80vw' : '60vw', maxWidth: '95vw', minWidth: '20rem', minHeight: '70vh' }}
+           style=${{ width: wide ? '40vw' : '60vw', maxWidth: '95vw', minWidth: '16rem', minHeight: '70vh' }}
            onClick=${e => e.stopPropagation()}>
         <div class="flex items-center px-4 py-3 border-b border-gray-700 flex-shrink-0">
           <h2 class="text-base font-semibold flex-1">${title}</h2>
@@ -1055,14 +1058,33 @@ function App() {
   const [inclPwInUrl,       setInclPwInUrl]       = useState(loadSaved('inclPwInUrl', fragmentParams.sshPassword() !== undefined));
   const [autoConnect,       setAutoConnect]       = useState(loadSaved('autoConnect', fragmentParams.autoConnect() ?? false));
   const [showMore,          setShowMore]          = useState(false);
-  const [connecting,        setConnecting]        = useState(false);
   const [supportsStreams,   setSupportsStreams]   = useState(true);
-  const [keyMgrOpen,        setKeyMgrOpen]        = useState(false);
+  const [route,             setRoute]             = useState(location.hash || '#');
   const [newKeyOpen,        setNewKeyOpen]        = useState(false);
   const [genKeyOpen,        setGenKeyOpen]        = useState(false);
-  const [hostMgrOpen,       setHostMgrOpen]       = useState(false);
-  const [connectOpts,       setConnectOpts]       = useState(null);
-  const [connectEpoch,      setConnectEpoch]      = useState(0);
+  const [connections,       setConnections]       = useState([]);
+  const [activeConnectionId, setActiveConnectionId] = useState(null);
+  const connIdCounter = useRef(0);
+  const connectionsRef = useRef(connections);
+  connectionsRef.current = connections;
+
+  // Sync route with hash changes
+  useEffect(() => {
+    const handler = () => {
+      const r = location.hash || '#';
+      setRoute(r);
+      if (r === '#keys' || r === '#hosts') {
+        setActiveConnectionId(null);
+      } else if (/^#\d+$/.test(r)) {
+        const id = parseInt(r.substring(1), 10);
+        if (connectionsRef.current.some(c => c.id === id)) setActiveConnectionId(id);
+      } else if (r === '#') {
+        setActiveConnectionId(null);
+      }
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
 
   // Persist form state to sessionStorage
   useEffect(() => {
@@ -1073,38 +1095,51 @@ function App() {
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
 
-  // Connection params: use connectOpts (from Hosts) when set, otherwise form values
-  const connHost = connectOpts?.hostname ?? sshHost;
-  const connPort = connectOpts?.port ?? sshPort;
-  const connUser = connectOpts?.username ?? username;
-  const connPw   = connectOpts?.password !== undefined ? connectOpts.password : effectiveSshPassword;
-
-  // Full URL with host/port as query params
-  const pipingFullUrl = useMemo(() => {
-    try {
-      const url = new URL(pipingServerUrl);
-      url.searchParams.set('hostname', connHost);
-      url.searchParams.set('port', connPort);
-      return url.href;
-    } catch {
-      return '';
-    }
-  }, [pipingServerUrl, connHost, connPort]);
-
   useEffect(() => {
     checkSupportsRequestStreams().then(s => setSupportsStreams(s));
   }, []);
 
   useEffect(() => {
-    if (fragmentParams.autoConnect()) connect();
+    if (fragmentParams.autoConnect()) startConnection({ hostname: sshHost, port: sshPort, username, password: effectiveSshPassword });
   }, []); // eslint-disable-line
+
+  function startConnection({ hostname, port, username, password, agentForwarding }) {
+    let fullUrl = '';
+    try {
+      const url = new URL(pipingServerUrl);
+      url.searchParams.set('hostname', hostname);
+      url.searchParams.set('port', port);
+      fullUrl = url.href;
+    } catch {}
+    const id = ++connIdCounter.current;
+    setConnections(prev => [...prev, {
+      id,
+      hostname,
+      port,
+      username,
+      password: password ?? '',
+      agentForwarding: agentForwarding ?? false,
+      pipingFullUrl: fullUrl,
+      status: 'connecting',
+      name: `${username}@${hostname}`,
+    }]);
+    setActiveConnectionId(id);
+    location.hash = `#${id}`;
+  }
+
+  function closeConnection(connId) {
+    const remaining = connectionsRef.current.filter(c => c.id !== connId);
+    setConnections(remaining);
+    if (activeConnectionId === connId) {
+      setActiveConnectionId(remaining.length > 0 ? remaining[remaining.length-1].id : null);
+    }
+  }
 
   function connect(host) {
     if (host) {
-      setConnectOpts(host);
-      setHostMgrOpen(false);
+      startConnection(host);
     } else {
-      setConnectOpts({ hostname: sshHost, port: sshPort, username });
+      startConnection({ hostname: sshHost, port: sshPort, username, password: effectiveSshPassword, agentForwarding: false });
       // Save to host presets
       const hosts = getStoredHosts();
       const idx   = hosts.findIndex(h => h.hostname === sshHost && h.port === sshPort && h.username === username);
@@ -1113,8 +1148,6 @@ function App() {
       else            { hosts.push(entry); }
       persistHosts(hosts);
     }
-    setConnectEpoch(n => n + 1);
-    setConnecting(true);
   }
 
   function formValid() {
@@ -1143,40 +1176,102 @@ function App() {
     <div class="min-h-screen flex flex-col">
 
       <!-- App bar -->
-      <header class="flex-shrink-0 h-12 flex items-center px-6 gap-4 z-10 border-b border-gray-800/50">
-        <a href="" onClick=${e => { e.preventDefault(); setConnecting(false); setConnectOpts(null); setConnectEpoch(0); window.scrollTo(0, 0); }} class="text-sm font-medium text-gray-200 no-underline mr-auto tracking-tight">Piping SSH</a>
+      <header class="flex-shrink-0 flex items-center px-3 py-1 gap-1 z-10 border-b border-gray-800/50">
+        <a href="#" onClick=${e => { e.preventDefault(); setActiveConnectionId(null); window.scrollTo(0, 0); location.hash = ''; }} class="text-xs font-medium text-gray-200 no-underline mr-2 tracking-tight flex-shrink-0">Piping SSH</a>
 
-        <button type="button" onClick=${() => setKeyMgrOpen(true)}
-          class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2.5 py-1">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-          Keys
-        </button>
-        <button type="button" onClick=${() => setHostMgrOpen(true)}
-          class="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2.5 py-1">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          Hosts
-        </button>
+        <!-- Connection tabs -->
+        ${connections.length > 0 && html`
+          <div class="flex-1 flex items-center gap-0.5 overflow-x-auto min-w-0">
+            ${connections.map(c => {
+              const statusEmoji = c.status === 'connected' ? '🔌' : c.status === 'connecting' ? '🔄' : '⚪';
+              return html`
+                <button key=${c.id} type="button" onClick=${() => { setActiveConnectionId(c.id); location.hash = `#${c.id}`; }}
+                  class="flex items-center gap-1 px-2 py-0.5 rounded text-xs whitespace-nowrap transition-colors flex-shrink-0 max-w-32
+                    ${activeConnectionId === c.id ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'}">
+                  <span style=${{ fontSize: '10px' }}>${statusEmoji}</span>
+                  <span class="truncate">${c.name}</span>
+                  <button type="button" onClick=${e => { e.stopPropagation(); closeConnection(c.id); }}
+                    class="text-gray-600 hover:text-white p-0.5 ml-0.5 flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </button>
+              `;
+            })}
+            <button type="button" onClick=${() => { setActiveConnectionId(null); location.hash = '#hosts'; }}
+              class="flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors text-sm px-1 rounded flex-shrink-0 hover:bg-gray-800"
+              title="New connection">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        `}
 
-        <a href="https://github.com/nwtgck/piping-ssh-web" target="_blank" rel="noopener"
-          class="text-gray-600 hover:text-gray-400 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-        </a>
+        <div class="flex items-center gap-1 ml-auto">
+          <a href="#keys"
+            class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2 py-0.5 no-underline">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            Keys
+          </a>
+          <a href="#hosts"
+            class="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors border border-gray-700 hover:border-gray-500 rounded px-2 py-0.5 no-underline">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            Hosts
+          </a>
+
+          <a href="https://github.com/nwtgck/piping-ssh-web" target="_blank" rel="noopener"
+            class="text-gray-500 hover:text-gray-300 transition-colors p-0.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+          </a>
+        </div>
       </header>
 
       <!-- Main content -->
       <main class="flex-1 flex flex-col">
-        ${connecting
-          ? html`<${PipingSsh} key=${connectEpoch}
-              pipingServerUrl=${pipingFullUrl}
-              username=${connUser}
-              defaultSshPassword=${connPw}
-              agentForwarding=${!!connectOpts?.agentForwarding}
-              onEnd=${() => { setConnecting(false); setConnectOpts(null); setConnectEpoch(0); }}
-            />`
+        ${connections.map(c => html`
+          <div style=${{ display: c.id === activeConnectionId ? 'flex' : 'none', flex: 1 }}>
+            <${PipingSsh} key=${c.id}
+              isActive=${c.id === activeConnectionId}
+              pipingServerUrl=${c.pipingFullUrl}
+              username=${c.username}
+              defaultSshPassword=${c.password}
+              agentForwarding=${c.agentForwarding}
+              onConnected=${() => setConnections(prev => prev.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc))}
+              onEnd=${() => setConnections(prev => prev.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc))}
+            />
+          </div>
+        `)}
+        ${!activeConnectionId && (route === '#keys'
+          ? html`
+            <div class="flex-1 px-6 py-8" style=${{ maxWidth: '40rem', margin: '0 auto', width: '100%' }}>
+              <div class="flex items-center gap-3 mb-6">
+                <h2 class="text-base font-semibold">SSH Keys</h2>
+                <div class="flex gap-2 ml-auto">
+                  <button type="button" onClick=${() => setNewKeyOpen(true)}
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
+                    + New
+                  </button>
+                  <button type="button" onClick=${() => setGenKeyOpen(true)}
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
+                    ✦ Generate
+                  </button>
+                </div>
+              </div>
+              <${KeyManager} />
+            </div>
+          `
+          : route === '#hosts'
+          ? html`
+            <div class="flex-1 px-6 py-8" style=${{ maxWidth: '40rem', margin: '0 auto', width: '100%' }}>
+              <h2 class="text-base font-semibold mb-6">SSH Hosts</h2>
+              <${HostManager} onConnect=${connect} connections=${connections} onDisconnect=${(h) => {
+                connections.filter(c => c.hostname === h.hostname && c.port === h.port && c.username === h.username).forEach(c => closeConnection(c.id));
+              }} />
+            </div>
+          `
           : html`
-            <div class="max-w-xl mx-auto px-6 pt-12">
+            <div class="flex-1 flex flex-col items-center justify-center px-6">
+              <div class="max-w-xl">
 
               ${!supportsStreams && html`
                 <div class="border border-amber-800/50 rounded-sm p-3 mb-8 text-xs text-amber-600/80">
@@ -1284,28 +1379,14 @@ function App() {
               </form>
 
             </div>
+            </div>
           `
-        }
+        )}
       </main>
 
       <!-- Globals -->
       <${GlobalPrompt} />
       <${GlobalSnackbar} />
-
-      <!-- Key manager dialog -->
-      <${Dialog} title="Keys" open=${keyMgrOpen} onClose=${() => setKeyMgrOpen(false)} wide=${true}>
-        <div class="flex justify-end gap-3 mb-4">
-          <button type="button" onClick=${() => setNewKeyOpen(true)}
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
-            + New
-          </button>
-          <button type="button" onClick=${() => setGenKeyOpen(true)}
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
-            ✦ Generate
-          </button>
-        </div>
-        <${KeyManager} />
-      <//>
 
       <!-- New key dialog -->
       <${Dialog} title="New key" open=${newKeyOpen} onClose=${() => setNewKeyOpen(false)}>
@@ -1315,11 +1396,6 @@ function App() {
       <!-- Generate key dialog -->
       <${Dialog} title="Key generator" open=${genKeyOpen} onClose=${() => setGenKeyOpen(false)}>
         <${KeyGenerator} onSave=${handleSaveKey} />
-      <//>
-
-      <!-- Hosts dialog -->
-      <${Dialog} title="Hosts" open=${hostMgrOpen} onClose=${() => setHostMgrOpen(false)} wide=${true}>
-        <${HostManager} onConnect=${connect} activeHost=${connectOpts} onDisconnect=${() => { setConnecting(false); setConnectOpts(null); setHostMgrOpen(false); }} />
       <//>
     </div>
   `;
