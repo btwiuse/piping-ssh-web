@@ -916,12 +916,14 @@ function HostManager({ onConnect, connections, onDisconnect }) {
               <!-- Connect / Disconnect button -->
               ${active
                 ? html`<button type="button" onClick=${() => onDisconnect(h)}
-                    class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-xs text-white transition-colors flex-shrink-0 w-28 text-center">
-                    Disconnect
+                    class="px-2 py-1 hover:bg-red-700/50 rounded text-sm transition-colors flex-shrink-0 leading-none"
+                    title="Disconnect">
+                    ⏹
                   </button>`
                 : html`<button type="button" onClick=${() => onConnect(h)}
-                    class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-xs text-white transition-colors flex-shrink-0 w-28 text-center">
-                    Connect
+                    class="px-2 py-1 hover:bg-amber-600/50 rounded text-sm transition-colors flex-shrink-0 leading-none"
+                    title="Connect">
+                    →
                   </button>`
               }
             </div>
