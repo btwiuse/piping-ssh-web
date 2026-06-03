@@ -1121,6 +1121,7 @@ function App() {
   const [editingServerIdx, setEditingServerIdx] = useState(-1);
   const [serverEditInput, setServerEditInput] = useState('');
   const [serverVer, setServerVer] = useState(0);
+  const [hostDropdownOpen, setHostDropdownOpen] = useState(false);
   const [newKeyOpen,        setNewKeyOpen]        = useState(false);
   const [genKeyOpen,        setGenKeyOpen]        = useState(false);
   const [connections,       setConnections]       = useState([]);
@@ -1130,6 +1131,7 @@ function App() {
   connectionsRef.current = connections;
   const restoredRef = useRef(false);
   const serverDropdownRef = useRef(null);
+  const hostDropdownRef = useRef(null);
 
   // Sync route with hash changes
   useEffect(() => {
@@ -1177,6 +1179,13 @@ function App() {
   // Close server dropdown on click outside
   useEffect(() => {
     const handler = e => { if (serverDropdownRef.current && !serverDropdownRef.current.contains(e.target)) { setServerDropdownOpen(false); setEditingServerIdx(-1); } };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Close host dropdown on click outside
+  useEffect(() => {
+    const handler = e => { if (hostDropdownRef.current && !hostDropdownRef.current.contains(e.target)) { setHostDropdownOpen(false); } };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
@@ -1374,24 +1383,57 @@ function App() {
               <form onSubmit=${e => { e.preventDefault(); connect(); }} class="space-y-6">
 
                 <!-- username @ host : port -->
-                <div class="flex gap-0 items-center">
-                  <div class="w-28" style=${{ flexShrink: 0 }}>
-                    <input name="username" autocomplete="username" value=${username} onInput=${e => setUsername(e.target.value)} required
-                      placeholder="username"
-                      disabled=${!supportsStreams} class=${inputClass} />
+                <div ref=${hostDropdownRef} class="relative">
+                  <div class="flex gap-0 items-center">
+                    <div class="w-28" style=${{ flexShrink: 0 }}>
+                      <input name="username" value=${username} onInput=${e => setUsername(e.target.value)} required
+                        placeholder="user"
+                        disabled=${!supportsStreams} class="${inputClass} rounded-r-none" />
+                    </div>
+                    <span style=${{ userSelect: 'none', color: '#52525b', fontSize: '16px', padding: '0 6px', flexShrink: 0 }}>@</span>
+                    <div class="flex-1" style=${{ minWidth: 0 }}>
+                      <input name="ssh-host" autocomplete="host" value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
+                        placeholder="ssh host"
+                        disabled=${!supportsStreams} class="${inputClass} rounded-none -ml-px relative" />
+                    </div>
+                    <span style=${{ userSelect: 'none', color: '#52525b', fontSize: '16px', padding: '0 6px', flexShrink: 0 }}>:</span>
+                    <div class="w-20 flex-shrink-0">
+                      <input name="ssh-port" autocomplete="port" value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
+                        placeholder="port"
+                        disabled=${!supportsStreams} class="${inputClass} rounded-none -ml-px relative" />
+                    </div>
+                    <button type="button" onClick=${() => setHostDropdownOpen(p => !p)}
+                      class="ml-1.5 px-2 border border-gray-800 rounded-sm bg-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700 transition-colors self-stretch ${!supportsStreams ? 'opacity-50 cursor-not-allowed' : ''}">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
                   </div>
-                  <span style=${{ userSelect: 'none', color: '#52525b', fontSize: '16px', padding: '0 6px', flexShrink: 0 }}>@</span>
-                  <div class="flex-1" style=${{ minWidth: 0 }}>
-                    <input name="ssh-host" autocomplete="host" value=${sshHost} onInput=${e => setSshHost(e.target.value)} required
-                      placeholder="ssh host"
-                      disabled=${!supportsStreams} class=${inputClass} />
-                  </div>
-                  <span style=${{ userSelect: 'none', color: '#52525b', fontSize: '16px', padding: '0 6px', flexShrink: 0 }}>:</span>
-                  <div class="w-20 flex-shrink-0">
-                    <input name="ssh-port" autocomplete="port" value=${sshPort} onInput=${e => setSshPort(e.target.value)} required
-                      placeholder="port"
-                      disabled=${!supportsStreams} class=${inputClass} />
-                  </div>
+                  ${hostDropdownOpen && html`
+                    <div class="absolute left-0 right-0 top-full mt-1 z-50 bg-gray-900 border border-gray-700 rounded-sm shadow-xl max-h-48 overflow-y-auto">
+                      ${getStoredHosts().map((h, i) => {
+                        const label = h.name || `${h.username}@${h.hostname}`;
+                        const current = username === h.username && sshHost === h.hostname && sshPort === h.port;
+                        return html`
+                          <div class="flex items-center gap-1 px-2 py-1.5 text-xs border-b border-gray-800 last:border-b-0 hover:bg-gray-800/50 group ${current ? 'bg-gray-800' : ''}">
+                            <button type="button" onClick=${() => { setUsername(h.username); setSshHost(h.hostname); setSshPort(h.port); setSshPassword(h.password ?? ''); setHostDropdownOpen(false); }}
+                              class="flex-1 text-left truncate py-0.5 ${current ? 'text-amber-400' : 'text-gray-300'}">${label}</button>
+                            <button type="button" onClick=${() => { location.hash = '#hosts'; setHostDropdownOpen(false); }}
+                              class="text-gray-600 hover:text-gray-300 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Edit in Hosts">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button type="button" onClick=${() => { removeHost(i); }}
+                              class="text-gray-600 hover:text-red-400 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Delete">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                          </div>
+                        `;
+                      })}
+                      <button type="button" onClick=${() => { addHost({ name: `${username}@${sshHost}`, hostname: sshHost, port: sshPort, username, password: sshPassword, agentForwarding: false }); setHostDropdownOpen(false); }}
+                        class="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-800/50 border-t border-gray-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add current as host
+                      </button>
+                    </div>
+                  `}
                 </div>
 
                 <!-- Connect button -->
