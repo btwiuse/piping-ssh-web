@@ -26,6 +26,27 @@ const promptReconnect = (term, msg) => {
     .then(() => { term.reset(); });
 };
 
+const ICON = {
+  connected:    '🟢',
+  connecting:   '🟡',
+  disconnected: '🔴',
+  hostActive:   '🔌',
+  hostInactive: '🖥',
+  disconnect:   '▣',
+  connect:      '→',
+  visible:      '👁',
+  hidden:       '🙈',
+  key:          '🔑',
+  expandOpen:   '▲',
+  expandClosed: '▼',
+  delete:       '🗑',
+  closeBtn:     '✕',
+  generate:     '✦',
+  warning:      '⚠',
+  dash:         '—',
+  plus:         '+',
+};
+
 // ─── Fragment params ──────────────────────────────────────────────────────────
 
 const P = {
@@ -299,7 +320,7 @@ function GlobalPrompt() {
             ${isPw && html`
               <button type="button" onClick=${() => setShowPw(p => !p)}
                 class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 p-1">
-                ${showPw ? '🙈' : '👁'}
+                ${showPw ? ICON.hidden : ICON.visible}
               </button>
             `}
           </div>
@@ -382,7 +403,7 @@ function CopyButton({ text }) {
 
 // ─── PipingSsh (terminal view) ────────────────────────────────────────────────
 
-function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd, onConnected, onSavePassword, isActive = true }) {
+function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd, onConnected, onReconnecting, onSavePassword, isActive = true }) {
   const termRef  = useRef(null);
   const fitRef   = useRef(null);
   const termApi  = useRef(null);
@@ -451,9 +472,11 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         cancel = true;
         wsStream.close();
         mcRef.current?.port1.postMessage({ type: 'disconnect' });
+        onEnd?.();
         setConnState('disconnected');
         setTimeout(async () => {
           await promptReconnect(term, 'Cancelled. Press any key to reconnect...');
+          onReconnecting?.();
           setConnState('connecting');
           doConnect();
         }, 0);
@@ -469,6 +492,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         localCancelled = true;
         onEnd?.();
         await promptReconnect(term, 'WebSocket connection failed. Press any key to retry...');
+        onReconnecting?.();
         setConnState('connecting');
         doConnect();
         return;
@@ -590,6 +614,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         onEnd?.();
         if (cancel) return;
         await promptReconnect(term, 'Connection closed. Press any key to reconnect...');
+        onReconnecting?.();
         setConnState('connecting');
       }
       doConnect();
@@ -763,7 +788,7 @@ function KeyGenerator({ onSave }) {
         </div>
         ${keyBits >= 4096 && html`
           <div class="border border-amber-800/50 text-amber-600/80 rounded-sm p-3 text-sm">
-            ⚠ It will take about 1 minute or more to generate. Ed25519 is recommended.
+            ${ICON.warning} It will take about 1 minute or more to generate. Ed25519 is recommended.
           </div>
         `}
       `}
@@ -817,7 +842,7 @@ function KeyManager() {
               <button type="button"
                 onClick=${() => setExpanded(open ? null : fp)}
                 class="flex items-center gap-3 flex-1 min-w-0 text-left">
-                <span class="text-base ${k.enabled ? '' : 'opacity-30'}">🔑</span>
+                <span class="text-base ${k.enabled ? '' : 'opacity-30'}">${ICON.key}</span>
                 <div class="flex-1 min-w-0 ${!k.enabled ? 'text-gray-500' : ''}">
                   <div class="text-sm truncate">${k.name}</div>
                   <div class="text-xs text-gray-600 font-mono truncate">${fp}</div>
@@ -898,7 +923,7 @@ function KeyManager() {
                         onClick=${() => setShowPriv(p => ({ ...p, [fp]: !p[fp] }))}
                         title=${pkShow ? 'Hide' : 'Show'}
                         class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
-                        ${pkShow ? '🙈' : '👁'}
+                        ${pkShow ? ICON.hidden : ICON.visible}
                       </button>
                       <button type="button" onClick=${() => downloadText(`${k.name}-priv.pem`, k.privateKey)}
                         title="Download" class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
@@ -969,7 +994,7 @@ function HostManager({ onConnect, connections, onDisconnect }) {
               <button type="button"
                 onClick=${() => setExpanded(open ? null : idx)}
                 class="flex items-center gap-3 flex-1 min-w-0 text-left">
-                <span class="text-base ${active ? '' : ''}">${active ? '🔌' : '🖥'}</span>
+                <span class="text-base ${active ? '' : ''}">${active ? ICON.hostActive : ICON.hostInactive}</span>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm truncate ${active ? 'text-amber-500' : ''}">${h.name}${active ? ' (connected)' : ''}</div>
                   <div class="text-xs text-gray-600 font-mono truncate">${h.username}@${h.hostname}:${h.port}</div>
@@ -981,12 +1006,12 @@ function HostManager({ onConnect, connections, onDisconnect }) {
                 ? html`<button type="button" onClick=${() => onDisconnect(h)}
                     class="px-2 py-1 hover:bg-red-700/50 rounded text-sm transition-colors flex-shrink-0 leading-none"
                     title="Disconnect">
-                    ⏹
+                    ${ICON.disconnect}
                   </button>`
                 : html`<button type="button" onClick=${() => onConnect(h)}
                     class="px-2 py-1 hover:bg-amber-600/50 rounded text-sm transition-colors flex-shrink-0 leading-none"
                     title="Connect">
-                    →
+                    ${ICON.connect}
                   </button>`
               }
             </div>
@@ -1092,7 +1117,7 @@ function Dialog({ title, open, onClose, children, wide = false }) {
         <div class="flex items-center px-4 py-3 border-b border-gray-700 flex-shrink-0">
           <h2 class="text-base font-semibold flex-1">${title}</h2>
           <button type="button" onClick=${onClose}
-            class="p-1 text-gray-400 hover:text-white transition-colors rounded">✕</button>
+            class="p-1 text-gray-400 hover:text-white transition-colors rounded">${ICON.closeBtn}</button>
         </div>
         <div class="flex-1 overflow-y-auto p-4">${children}</div>
       </div>
@@ -1301,7 +1326,7 @@ function App() {
   }
 
   function formValid() {
-    return !!(pipingServerUrl && sshHost && sshPort && username);
+    return !!(pipingServerUrl && sshHost && sshPort);
   }
 
   async function handleSaveKey(authKeySet) {
@@ -1336,7 +1361,7 @@ function App() {
         ${connections.length > 0 && html`
           <div class="flex-1 flex items-center gap-0.5 overflow-x-auto min-w-0">
             ${connections.map(c => {
-              const statusEmoji = c.status === 'connected' ? '🔌' : c.status === 'connecting' ? '🔄' : '⚪';
+              const statusEmoji = c.status === 'connected' ? ICON.connected : c.status === 'connecting' ? ICON.connecting : ICON.disconnected;
               return html`
                 <button key=${c.id} type="button" onClick=${() => { setActiveConnectionId(c.id); location.hash = `#${c.id}`; }}
                   class="flex items-center gap-1 px-2 py-0.5 rounded text-xs whitespace-nowrap transition-colors flex-shrink-0 max-w-32
@@ -1390,6 +1415,7 @@ function App() {
               defaultSshPassword=${c.password}
               agentForwarding=${c.agentForwarding}
               onConnected=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
+              onReconnecting=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'connecting'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
               onEnd=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
               onSavePassword=${pw => {
                 const hosts = getStoredHosts();
@@ -1411,7 +1437,7 @@ function App() {
                   </button>
                   <button type="button" onClick=${() => setGenKeyOpen(true)}
                     class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-sm text-sm text-white transition-colors">
-                    ✦ Generate
+                    ${ICON.generate} Generate
                   </button>
                 </div>
               </div>
@@ -1433,7 +1459,7 @@ function App() {
 
               ${!supportsStreams && html`
                 <div class="border border-amber-800/50 rounded-sm p-3 mb-8 text-xs text-amber-600/80">
-                  ⚠ Browser not supported. Use Chrome 105+, Edge, or other Chromium-based browsers.
+                  ${ICON.warning} Browser not supported. Use Chrome 105+, Edge, or other Chromium-based browsers.
                 </div>
               `}
 
@@ -1443,7 +1469,7 @@ function App() {
                 <div ref=${hostDropdownRef} class="relative">
                   <div class="flex gap-0 items-center">
                     <div class="w-28" style=${{ flexShrink: 0 }}>
-                      <input name="username" value=${username} onInput=${e => setUsername(e.target.value)} required
+                      <input name="username" value=${username} onInput=${e => setUsername(e.target.value)}
                         placeholder="user"
                         disabled=${!supportsStreams} class="${inputClass} rounded-r-none" />
                     </div>
@@ -1504,7 +1530,7 @@ function App() {
                 <div class="flex items-center pt-2">
                   <button type="button" onClick=${() => setShowMore(p => !p)}
                     class="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                    ${showMore ? '— Hide options' : '+ More options'}
+                    ${showMore ? `${ICON.dash} Hide options` : `${ICON.plus} More options`}
                   </button>
                 </div>
 
@@ -1579,7 +1605,7 @@ function App() {
                           class="${inputClass} pr-10" />
                         <button type="button" onClick=${() => setShowSshPw(p => !p)}
                           class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 p-1">
-                          ${showSshPw ? '🙈' : '👁'}
+                          ${showSshPw ? ICON.hidden : ICON.visible}
                         </button>
                       </div>
                     </div>
