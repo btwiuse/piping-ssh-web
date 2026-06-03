@@ -48,6 +48,6 @@ This version has been updated to align with the main `src/` frontend:
 
 ## Notes
 
-- Requires a **Chromium-based browser** (Chrome 105+, Edge, etc.) for streaming fetch support.
+- Requires a browser with **WebSocket** and **Streams API** support (all modern browsers, including Chrome, Firefox, Edge, and Safari).
 - `main.wasm` is **not** committed to git. Build it with `cd go && make` or copy a pre-built
   binary to `public/main.wasm`.

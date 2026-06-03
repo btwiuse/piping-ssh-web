@@ -7,6 +7,46 @@ import { createRoot } from 'react-dom/client';
 import htm from 'htm';
 import * as Comlink from 'comlink';
 
+// Polyfill WebSocketStream for Firefox and other non-Chromium browsers
+if (typeof globalThis.WebSocketStream === 'undefined') {
+  globalThis.WebSocketStream = class {
+    constructor(url, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      this.url = url;
+      const ws = new WebSocket(url, options.protocols ?? []);
+      ws.binaryType = 'arraybuffer';
+      const close = (info = {}) => ws.close(info.closeCode, info.reason);
+      this.opened = new Promise((resolve, reject) => {
+        ws.onopen = () => {
+          resolve({
+            readable: new ReadableStream({
+              start(ctrl) {
+                ws.onmessage = ({ data }) => ctrl.enqueue(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+                ws.onerror = e => ctrl.error(e);
+              },
+              cancel: close,
+            }),
+            writable: new WritableStream({
+              write(chunk) { ws.send(chunk); },
+              abort() { ws.close(); },
+              close,
+            }),
+            protocol: ws.protocol,
+            extensions: ws.extensions,
+          });
+          ws.removeEventListener('error', reject);
+        };
+        ws.addEventListener('error', reject);
+      });
+      this.closed = new Promise(resolve => {
+        ws.onclose = ({ code, reason }) => resolve({ closeCode: code, reason });
+      });
+      this.close = close;
+      if (options.signal) options.signal.onabort = () => ws.close();
+    }
+  };
+}
+
 // Bind htm to React.createElement so we can write html`<div/>` everywhere.
 const html = htm.bind(h);
 
@@ -221,12 +261,8 @@ async function storeAuthKeySet({ name, publicKey, privateKey, storeType }) {
 
 // ─── Supports request streams ─────────────────────────────────────────────────
 
-async function checkSupportsRequestStreams() {
-  try {
-    if (new Request('', { method: 'POST', body: new ReadableStream(), duplex: 'half' }).headers.has('Content-Type')) return false;
-    return fetch('data:a/a;charset=utf-8,', { method: 'POST', body: new ReadableStream(), duplex: 'half' })
-      .then(() => true, () => false);
-  } catch { return false; }
+async function checkSupportsWebSocketStream() {
+  return typeof globalThis.WebSocketStream !== 'undefined';
 }
 
 // ─── Global prompt ────────────────────────────────────────────────────────────
@@ -1187,7 +1223,7 @@ function App() {
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
 
   useEffect(() => {
-    checkSupportsRequestStreams().then(s => setSupportsStreams(s));
+    checkSupportsWebSocketStream().then(s => setSupportsStreams(s));
   }, []);
 
   useEffect(() => {
