@@ -1098,7 +1098,6 @@ function App() {
   const connectionsRef = useRef(connections);
   connectionsRef.current = connections;
   const restoredRef = useRef(false);
-  const hasRestored = useRef(false);
 
   // Sync route with hash changes
   useEffect(() => {
@@ -1124,11 +1123,12 @@ function App() {
     try { sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(state)); } catch {}
   }, [pipingServerUrl, sshHost, sshPort, username, sshPassword, emptySshPw, inclPwInUrl, autoConnect]);
 
-  // Persist tabs to localStorage (skip initial empty save before restore)
+  // Save tabs on beforeunload (connRef always has latest due to eager sync)
   useEffect(() => {
-    if (!hasRestored.current) return;
-    saveTabs(connections);
-  }, [connections]);
+    const handle = () => saveTabs(connectionsRef.current);
+    window.addEventListener('beforeunload', handle);
+    return () => window.removeEventListener('beforeunload', handle);
+  }, []);
 
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
@@ -1147,7 +1147,6 @@ function App() {
     restoredRef.current = true;
     const saved = loadTabs();
     saved.forEach(s => startConnection(s, { activate: false }));
-    hasRestored.current = true;
   }, []); // eslint-disable-line
 
   function startConnection({ hostname, port, username, password, agentForwarding, pipingFullUrl }, { activate = true } = {}) {
@@ -1161,7 +1160,7 @@ function App() {
       } catch {}
     }
     const id = ++connIdCounter.current;
-    setConnections(prev => [...prev, {
+    const entry = {
       id,
       hostname,
       port,
@@ -1171,7 +1170,9 @@ function App() {
       pipingFullUrl: fullUrl,
       status: 'connecting',
       name: `${username}@${hostname}`,
-    }]);
+    };
+    connectionsRef.current = [...connectionsRef.current, entry];
+    setConnections(connectionsRef.current);
     if (activate) {
       setActiveConnectionId(id);
       location.hash = `#${id}`;
@@ -1179,10 +1180,11 @@ function App() {
   }
 
   function closeConnection(connId) {
-    const remaining = connectionsRef.current.filter(c => c.id !== connId);
-    setConnections(remaining);
+    const next = connectionsRef.current.filter(c => c.id !== connId);
+    connectionsRef.current = next;
+    setConnections(next);
     if (activeConnectionId === connId) {
-      setActiveConnectionId(remaining.length > 0 ? remaining[remaining.length-1].id : null);
+      setActiveConnectionId(next.length > 0 ? next[next.length-1].id : null);
     }
   }
 
@@ -1290,8 +1292,8 @@ function App() {
               username=${c.username}
               defaultSshPassword=${c.password}
               agentForwarding=${c.agentForwarding}
-              onConnected=${() => setConnections(prev => prev.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc))}
-              onEnd=${() => setConnections(prev => prev.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc))}
+              onConnected=${() => setConnections(prev => { const next = prev.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc); connectionsRef.current = next; return next; })}
+              onEnd=${() => setConnections(prev => { const next = prev.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc); connectionsRef.current = next; return next; })}
             />
           </div>
         `)}
