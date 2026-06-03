@@ -18,6 +18,13 @@ const html = htm.bind(h);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
+const promptReconnect = (term, msg) => {
+  if (!term || term.isDisposed) return Promise.resolve();
+  term.write("\r\n\r\n\x1b[90m" + msg + "\x1b[0m");
+  return new Promise(resolve => { const d = term.onKey(() => { d.dispose(); resolve(); }); })
+    .then(() => { term.reset(); });
+};
+
 // ─── Fragment params ──────────────────────────────────────────────────────────
 
 const P = {
@@ -444,10 +451,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         wsStream.close();
         setConnState('disconnected');
         setTimeout(async () => {
-          const t = termApi.current;
-          if (!t || t.isDisposed) return;
-          t.write("\r\n\r\n\x1b[90mCancelled. Press any key to reconnect...\x1b[0m");
-          await new Promise(resolve => { const d = t.onKey(() => { d.dispose(); resolve(); }); });
+          await promptReconnect(term, 'Cancelled. Press any key to reconnect...');
           setConnState('connecting');
           doConnect();
         }, 0);
@@ -462,10 +466,8 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         showSnackbar({ message: 'WebSocket connection failed: ' + (e.message || e) });
         localCancelled = true;
         onEnd?.();
-        if (!term.isDisposed) {
-          term.write("\r\n\r\n\x1b[90mWebSocket connection failed. Press any key to retry...\x1b[0m");
-          await new Promise(resolve => { const d = term.onKey(() => { d.dispose(); resolve(); }); });
-        }
+        await promptReconnect(term, 'WebSocket connection failed. Press any key to retry...');
+        setConnState('connecting');
         doConnect();
         return;
       }
@@ -584,11 +586,8 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         else { console.error('SSH error', e); showSnackbar({ message: `Connection closed: ${e.message || e}`, icon: '!' }); }
       } finally {
         onEnd?.();
-        term.write("\r\n\r\n\x1b[90mConnection closed. Press any key to reconnect...\x1b[0m");
-        await new Promise(resolve => {
-          const disposable = term.onKey(() => { disposable.dispose(); resolve(); });
-        });
-        term.write("\r\n\x1b[90mReconnecting...\x1b[0m\n");
+        await promptReconnect(term, 'Connection closed. Press any key to reconnect...');
+        setConnState('connecting');
       }
       doConnect();
     };
