@@ -449,6 +449,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
       abortRef.current = () => {
         cancel = true;
         wsStream.close();
+        mcRef.current?.port1.postMessage({ type: 'disconnect' });
         setConnState('disconnected');
         setTimeout(async () => {
           await promptReconnect(term, 'Cancelled. Press any key to reconnect...');
@@ -586,6 +587,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         else { console.error('SSH error', e); showSnackbar({ message: `Connection closed: ${e.message || e}`, icon: '!' }); }
       } finally {
         onEnd?.();
+        if (cancel) return;
         await promptReconnect(term, 'Connection closed. Press any key to reconnect...');
         setConnState('connecting');
       }
