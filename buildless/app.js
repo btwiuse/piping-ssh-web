@@ -396,7 +396,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
   // ResizeObserver for reliable terminal resize on any container size change
   useEffect(() => {
     const el = wrapperRef.current;
-    if (!el || connState !== 'connected') return;
+    if (!el || connState !== 'connected' || !isActive) return;
     let rafId;
     const ro = new ResizeObserver(() => {
       rafId = requestAnimationFrame(() => fitRef.current?.());
@@ -406,7 +406,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
       ro.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [connState]);
+  }, [connState, isActive]);
 
   useEffect(() => {
     // xterm globals injected by CDN scripts
