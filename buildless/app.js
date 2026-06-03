@@ -8,43 +8,9 @@ import htm from 'htm';
 import * as Comlink from 'comlink';
 
 // Polyfill WebSocketStream for Firefox and other non-Chromium browsers
+import { WebSocketStream as PolyfillWS } from 'websocketstream-polyfill';
 if (typeof globalThis.WebSocketStream === 'undefined') {
-  globalThis.WebSocketStream = class {
-    constructor(url, options = {}) {
-      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-      this.url = url;
-      const ws = new WebSocket(url, options.protocols ?? []);
-      ws.binaryType = 'arraybuffer';
-      const close = (info = {}) => ws.close(info.closeCode, info.reason);
-      this.opened = new Promise((resolve, reject) => {
-        ws.onopen = () => {
-          resolve({
-            readable: new ReadableStream({
-              start(ctrl) {
-                ws.onmessage = ({ data }) => ctrl.enqueue(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
-                ws.onerror = e => ctrl.error(e);
-              },
-              cancel: close,
-            }),
-            writable: new WritableStream({
-              write(chunk) { ws.send(chunk); },
-              abort() { ws.close(); },
-              close,
-            }),
-            protocol: ws.protocol,
-            extensions: ws.extensions,
-          });
-          ws.removeEventListener('error', reject);
-        };
-        ws.addEventListener('error', reject);
-      });
-      this.closed = new Promise(resolve => {
-        ws.onclose = ({ code, reason }) => resolve({ closeCode: code, reason });
-      });
-      this.close = close;
-      if (options.signal) options.signal.onabort = () => ws.close();
-    }
-  };
+  globalThis.WebSocketStream = PolyfillWS;
 }
 
 // Bind htm to React.createElement so we can write html`<div/>` everywhere.
