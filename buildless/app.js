@@ -212,10 +212,153 @@ const workerGenerateRsa           = b   => getAliveWorker().then(r => r.generate
 const workerGenerateEd25519       = ()  => getAliveWorker().then(r => r.generateEd25519Keys());
 const workerGenerateEcdsa         = b   => getAliveWorker().then(r => r.generateEcdsaKeys(b));
 
-async function storeAuthKeySet({ name, publicKey, privateKey, storeType }) {
+// ─── Passkey (WebAuthn) helpers ─────────────────────────────────────────────
+
+function b64enc(buf) {
+  let s = '';
+  for (let i = 0; i < buf.length; i++) s += String.fromCharCode(buf[i]);
+  return btoa(s);
+}
+
+function ab2b64(ab) {
+  return b64enc(new Uint8Array(ab));
+}
+
+function parseCoseKey(buf) {
+  const b = new Uint8Array(buf);
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let off = 0;
+  function ri() {
+    const fb = dv.getUint8(off++);
+    const mt = fb >> 5, info = fb & 0x1f;
+    let v;
+    if (info < 24) v = info;
+    else if (info === 24) v = dv.getUint8(off++);
+    else if (info === 25) { v = dv.getUint16(off); off += 2; }
+    else if (info === 26) { v = dv.getUint32(off); off += 4; }
+    else throw new Error('unsupported CBOR info ' + info);
+    if (mt === 0) return v;
+    if (mt === 1) return -1 - v;
+    if (mt === 2) { const s = b.slice(off, off + v); off += v; return s; }
+    if (mt === 3) { const s = new TextDecoder().decode(b.slice(off, off + v)); off += v; return s; }
+    if (mt === 5) { const m = {}; for (let i = 0; i < v; i++) { const k = ri(), rv = ri(); m[k] = rv; } return m; }
+    throw new Error('unsupported CBOR mt ' + mt);
+  }
+  return ri();
+}
+
+function coseToSshPubkey(coseBytes) {
+  const key = parseCoseKey(coseBytes);
+  const alg = key[3];
+  if (alg === -8) {
+    const x = key[-2];
+    const algo = 'ssh-ed25519';
+    const wire = new Uint8Array(4 + algo.length + 4 + (x.length));
+    const wdv = new DataView(wire.buffer);
+    let i = 0;
+    wdv.setUint32(i, algo.length); i += 4;
+    for (let j = 0; j < algo.length; j++) wire[i++] = algo.charCodeAt(j);
+    wdv.setUint32(i, x.length); i += 4;
+    wire.set(x, i);
+    return algo + ' ' + b64enc(wire);
+  }
+  if (alg === -7) {
+    const algo = 'ecdsa-sha2-nistp256';
+    const ident = 'nistp256';
+    const x = key[-2], y = key[-3];
+    const point = new Uint8Array(1 + x.length + y.length);
+    point[0] = 0x04;
+    point.set(x, 1);
+    point.set(y, 1 + x.length);
+    const wire = new Uint8Array(4 + algo.length + 4 + ident.length + 4 + point.length);
+    const wdv = new DataView(wire.buffer);
+    let i = 0;
+    wdv.setUint32(i, algo.length); i += 4;
+    for (let j = 0; j < algo.length; j++) wire[i++] = algo.charCodeAt(j);
+    wdv.setUint32(i, ident.length); i += 4;
+    for (let j = 0; j < ident.length; j++) wire[i++] = ident.charCodeAt(j);
+    wdv.setUint32(i, point.length); i += 4;
+    wire.set(point, i);
+    return algo + ' ' + b64enc(wire);
+  }
+  if (alg === -257) {
+    const algo = 'ssh-rsa';
+    const n = key[-1], e = key[-2];
+    const wire = new Uint8Array(4 + algo.length + 4 + e.length + 4 + n.length);
+    const wdv = new DataView(wire.buffer);
+    let i = 0;
+    wdv.setUint32(i, algo.length); i += 4;
+    for (let j = 0; j < algo.length; j++) wire[i++] = algo.charCodeAt(j);
+    wdv.setUint32(i, e.length); i += 4;
+    wire.set(e, i); i += e.length;
+    wdv.setUint32(i, n.length); i += 4;
+    wire.set(n, i);
+    return algo + ' ' + b64enc(wire);
+  }
+  throw new Error('unsupported COSE algorithm: ' + alg);
+}
+
+function coseAlgLabel(alg) {
+  if (alg === -8)  return 'Ed25519';
+  if (alg === -7)  return 'ECDSA P-256';
+  if (alg === -257) return 'RSA PKCS1';
+  return 'alg ' + alg;
+}
+
+async function createPasskey(name) {
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const userId    = crypto.getRandomValues(new Uint8Array(16));
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      challenge,
+      rp: { name: 'Piping SSH', id: location.hostname },
+      user: { id: userId, name, displayName: name },
+      pubKeyCredParams: [
+        { type: 'public-key', alg: -8   },
+        { type: 'public-key', alg: -7   },
+        { type: 'public-key', alg: -257 },
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform',
+        residentKey: 'required',
+        userVerification: 'required',
+      },
+    },
+  });
+  const algorithm = credential.response.getPublicKeyAlgorithm();
+  const publicKeyBytes = credential.response.getPublicKey();
+  let sshPubkey;
+  if (publicKeyBytes) {
+    try {
+      sshPubkey = coseToSshPubkey(publicKeyBytes);
+    } catch (_) {
+      // COSE parsing failed — use getPublicKeyAlgorithm() as fallback
+      const algoName = algorithm === -8 ? 'ed25519' : algorithm === -7 ? 'ecdsa-p256' : algorithm === -257 ? 'rsa' : 'unknown';
+      sshPubkey = `passkey-${algoName} ${ab2b64(new Uint8Array(credential.rawId)).slice(0, 32)}`;
+    }
+  } else {
+    // getPublicKey() not supported on this browser — construct from algorithm only
+    const algoName = algorithm === -8 ? 'ed25519' : algorithm === -7 ? 'ecdsa-p256' : algorithm === -257 ? 'rsa' : 'unknown';
+    sshPubkey = `passkey-${algoName} ${ab2b64(new Uint8Array(credential.rawId)).slice(0, 32)}`;
+  }
+  return {
+    credentialId: ab2b64(credential.rawId),
+    publicKey: sshPubkey,
+    algorithm,
+    algLabel: coseAlgLabel(algorithm),
+    rawId: credential.rawId,
+  };
+}
+
+async function storeAuthKeySet({ name, publicKey, privateKey, storeType, credentialId, algorithm, algLabel, type }) {
   const fp = await workerGetFingerprint(publicKey);
   if (getStoredKeys().find(k => k.sha256Fingerprint === fp)) return 'already_exist';
-  _addKey({ name, publicKey, privateKey, storeType, sha256Fingerprint: fp, addedAtMillis: Date.now(), enabled: true });
+  const base = { name, publicKey, storeType, sha256Fingerprint: fp, addedAtMillis: Date.now(), enabled: true };
+  if (type === 'passkey') {
+    _addKey({ ...base, credentialId, algorithm, algLabel, type: 'passkey' });
+  } else {
+    _addKey({ ...base, privateKey });
+  }
   return 'stored';
 }
 
@@ -418,8 +561,8 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
       const termReadable = new ReadableStream({ start(ctrl) { term.onData(d => ctrl.enqueue(d)); } });
       window.addEventListener('beforeunload', () => mc.port1.postMessage({ type: 'disconnect' }));
 
-      // Prepare auth key sets
-      const storedKeys  = getStoredKeys().filter(s => s.enabled);
+      // Prepare auth key sets (skip passkeys — no private key to sign with)
+      const storedKeys  = getStoredKeys().filter(s => s.enabled && s.type !== 'passkey');
       const authKeySets = (await Promise.all(storedKeys.map(async s => ({
         publicKey:  s.publicKey,
         privateKey: s.privateKey,
@@ -637,12 +780,65 @@ function KeyGenerator({ onSave }) {
   const [ecdsaBits,  setEcdsaBits]  = useState(256);
   const [generating, setGenerating] = useState(false);
   const [generated,  setGenerated]  = useState(null);
+  const [passkey,    setPasskey]    = useState(null);
+  const [pkName,     setPkName]     = useState('');
+
+  // For passkey: after creation, show save dialog
+  if (passkey) {
+    return html`
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Name</label>
+          <input value=${pkName} onInput=${e => setPkName(e.target.value)}
+            class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50 placeholder-gray-600" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Algorithm</label>
+          <div class="text-sm text-gray-200 font-mono">${passkey.algLabel}</div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Credential ID</label>
+          <div class="text-xs text-gray-400 font-mono break-all">${passkey.credentialId}</div>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Public key</label>
+          <textarea readonly rows="2" class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-xs text-white font-mono resize-none">${passkey.publicKey}</textarea>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" onClick=${() => onSave({ name: pkName, publicKey: passkey.publicKey, credentialId: passkey.credentialId, algorithm: passkey.algorithm, algLabel: passkey.algLabel, storeType: 'local_storage', type: 'passkey' })}
+            disabled=${!pkName}
+            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 rounded-sm text-white transition-colors text-sm">
+            Save Passkey
+          </button>
+          <button type="button" onClick=${() => { setPasskey(null); setGenerated(null); }}
+            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-sm text-white transition-colors text-sm">
+            Cancel
+          </button>
+        </div>
+      </div>
+    `;
+  }
 
   if (generated) {
     return html`<${KeysEditor} onSave=${onSave} initialPublicKey=${generated.publicKey} initialPrivateKey=${generated.privateKey} />`;
   }
 
   async function generate() {
+    if (keyType === 'Passkey') {
+      setGenerating(true);
+      try {
+        const pk = await createPasskey('Passkey');
+        setPasskey(pk);
+        // Suggest a name
+        const existing = getStoredKeys().map(k => k.name);
+        let cand = pk.algLabel;
+        for (let n = 2; existing.includes(cand); n++) cand = `${pk.algLabel} (${n})`;
+        setPkName(cand);
+      } catch (e) {
+        showSnackbar({ message: 'Passkey creation failed: ' + (e.message || e), icon: '!' });
+      } finally { setGenerating(false); }
+      return;
+    }
     setGenerating(true);
     try {
       let keys;
@@ -662,7 +858,7 @@ function KeyGenerator({ onSave }) {
   return html`
     <div class="space-y-4">
       <div class="flex gap-4">
-        ${['Ed25519', 'ECDSA', 'RSA'].map(t => html`
+        ${['Ed25519', 'ECDSA', 'RSA', 'Passkey'].map(t => html`
           <label key=${t} class="flex items-center gap-2 cursor-pointer text-sm">
             <input type="radio" name="keyType" value=${t} checked=${keyType === t}
               onChange=${() => setKeyType(t)} disabled=${generating} class="accent-amber-500" />
@@ -742,6 +938,7 @@ function KeyManager() {
   return html`
     <div class="space-y-2">
       ${keys.map(k => {
+        const isPk = k.type === 'passkey';
         const fp   = k.sha256Fingerprint;
         const open = expanded === fp;
         const pkShow = showPriv[fp];
@@ -754,10 +951,10 @@ function KeyManager() {
               <button type="button"
                 onClick=${() => setExpanded(open ? null : fp)}
                 class="flex items-center gap-3 flex-1 min-w-0 text-left">
-                <span class="text-base ${k.enabled ? '' : 'opacity-30'}">🔑</span>
+                <span class="text-base ${k.enabled ? '' : 'opacity-30'}">${isPk ? '🔐' : '🔑'}</span>
                 <div class="flex-1 min-w-0 ${!k.enabled ? 'text-gray-500' : ''}">
-                  <div class="text-sm truncate">${k.name}</div>
-                  <div class="text-xs text-gray-600 font-mono truncate">${fp}</div>
+                  <div class="text-sm truncate">${k.name}${isPk ? html` <span class="text-amber-500/70 text-xs font-normal">Passkey</span>` : ''}</div>
+                  <div class="text-xs text-gray-600 font-mono truncate">${isPk ? k.credentialId?.slice?.(0, 32) + '...' : fp}</div>
                 </div>
                 <span class="text-gray-600 text-xs flex-shrink-0">${open ? '▲' : '▼'}</span>
               </button>
@@ -783,19 +980,38 @@ function KeyManager() {
                     class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500/50" />
                 </div>
 
-                <!-- Store type -->
-                <div>
-                  <label class="block text-xs text-gray-500 mb-1">Store type</label>
-                  <div class="flex flex-wrap gap-3">
-                    ${authKeysStoreTypes.map(t => html`
-                      <label key=${t} class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400">
-                        <input type="radio" name=${'st-' + fp} value=${t} checked=${k.storeType === t}
-                          onChange=${() => updateKey({ ...k, storeType: t })} class="accent-amber-500" />
-                        ${storeTypeLabel[t]}
-                      </label>
-                    `)}
+                ${isPk ? html`
+                  <!-- Algorithm -->
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Algorithm</label>
+                    <div class="text-sm text-gray-200 font-mono">${k.algLabel || ('alg ' + k.algorithm)}</div>
                   </div>
-                </div>
+                  <!-- Credential ID -->
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Credential ID</label>
+                    <div class="relative">
+                      <input value=${k.credentialId} readOnly
+                        class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 pr-10 text-xs text-white font-mono" />
+                      <div class="absolute top-0.5 right-1">
+                        <${CopyButton} text=${k.credentialId} />
+                      </div>
+                    </div>
+                  </div>
+                ` : html`
+                  <!-- Store type -->
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Store type</label>
+                    <div class="flex flex-wrap gap-3">
+                      ${authKeysStoreTypes.map(t => html`
+                        <label key=${t} class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400">
+                          <input type="radio" name=${'st-' + fp} value=${t} checked=${k.storeType === t}
+                            onChange=${() => updateKey({ ...k, storeType: t })} class="accent-amber-500" />
+                          ${storeTypeLabel[t]}
+                        </label>
+                      `)}
+                    </div>
+                  </div>
+                `}
 
                 <!-- Public key -->
                 <div>
@@ -813,43 +1029,45 @@ function KeyManager() {
                   </div>
                 </div>
 
-                <!-- Add-to-authorized-keys command -->
-                <div>
-                  <label class="block text-xs text-gray-500 mb-1">Command to add to ~/.ssh/authorized_keys</label>
-                  <div class="relative">
-                    <input value=${addCmd} readOnly
-                      class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 pr-10 text-xs text-white font-mono" />
-                    <div class="absolute top-0.5 right-1">
-                      <${CopyButton} text=${addCmd} />
+                ${!isPk ? html`
+                  <!-- Add-to-authorized-keys command -->
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Command to add to ~/.ssh/authorized_keys</label>
+                    <div class="relative">
+                      <input value=${addCmd} readOnly
+                        class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 pr-10 text-xs text-white font-mono" />
+                      <div class="absolute top-0.5 right-1">
+                        <${CopyButton} text=${addCmd} />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- Private key -->
-                <div>
-                  <div class="flex items-center justify-between mb-1">
-                    <label class="text-xs text-gray-500">Private key</label>
-                    <div class="flex gap-0.5">
-                      <${CopyButton} text=${k.privateKey} />
-                      <button type="button"
-                        onClick=${() => setShowPriv(p => ({ ...p, [fp]: !p[fp] }))}
-                        title=${pkShow ? 'Hide' : 'Show'}
-                        class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
-                        ${pkShow ? '🙈' : '👁'}
-                      </button>
-                      <button type="button" onClick=${() => downloadText(`${k.name}-priv.pem`, k.privateKey)}
-                        title="Download" class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                      </button>
+                  <!-- Private key -->
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <label class="text-xs text-gray-500">Private key</label>
+                      <div class="flex gap-0.5">
+                        <${CopyButton} text=${k.privateKey} />
+                        <button type="button"
+                          onClick=${() => setShowPriv(p => ({ ...p, [fp]: !p[fp] }))}
+                          title=${pkShow ? 'Hide' : 'Show'}
+                          class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
+                          ${pkShow ? '🙈' : '👁'}
+                        </button>
+                        <button type="button" onClick=${() => downloadText(`${k.name}-priv.pem`, k.privateKey)}
+                          title="Download" class="p-1 text-gray-500 hover:text-gray-300 transition-colors">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
+                      </div>
                     </div>
+                    ${pkShow
+                      ? html`<textarea value=${k.privateKey} readOnly rows="5"
+                          class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-xs text-white font-mono resize-none"></textarea>`
+                      : html`<input type="password" value=${k.privateKey} readOnly
+                          class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-xs text-white font-mono" />`
+                    }
                   </div>
-                  ${pkShow
-                    ? html`<textarea value=${k.privateKey} readOnly rows="5"
-                        class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-2 text-xs text-white font-mono resize-none"></textarea>`
-                    : html`<input type="password" value=${k.privateKey} readOnly
-                        class="w-full bg-transparent border border-gray-800 rounded-sm px-3 py-1.5 text-xs text-white font-mono" />`
-                  }
-                </div>
+                ` : ''}
 
                 <!-- Delete -->
                 <div class="flex justify-end pt-1">
