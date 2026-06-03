@@ -1080,7 +1080,8 @@ function Dialog({ title, open, onClose, children, wide = false }) {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
-const demoBaseUrl = 'https://websocket-tcp-proxy.navigaid.workers.dev/';
+const demoBaseUrl = 'https://websocket-tcp-proxy.fly.dev/';
+const altServerUrl = 'https://websocket-tcp-proxy.navigaid.workers.dev/';
 const FORM_STORAGE_KEY = 'piping-ssh-form';
 const TABS_STORAGE_KEY = 'piping-ssh-tabs';
 const PIPING_SERVERS_KEY = 'piping-ssh-servers';
@@ -1505,18 +1506,18 @@ function App() {
                       </div>
                       ${serverDropdownOpen && html`
                         <div class="absolute left-0 right-0 top-full mt-1 z-50 bg-gray-900 border border-gray-700 rounded-sm shadow-xl max-h-48 overflow-y-auto">
-                          ${[demoBaseUrl, ...getStoredPipingServers().filter(s => s !== demoBaseUrl)].map((s, i) => html`
+                          ${[...new Set([demoBaseUrl, altServerUrl, ...getStoredPipingServers()])].filter(s => s).map((s, i) => html`
                             <div class="flex items-center gap-1 px-2 py-1.5 text-xs border-b border-gray-800 last:border-b-0 hover:bg-gray-800/50 group ${s === pipingServerUrl ? 'bg-gray-800' : ''}">
                               ${editingServerIdx === i ? html`
                                 <input value=${serverEditInput} autofocus
                                   onInput=${e => setServerEditInput(e.target.value)}
-                                  onKeyDown=${e => { if (e.key === 'Enter' && serverEditInput) { if (s === demoBaseUrl) addPipingServer(serverEditInput); else updatePipingServer(s, serverEditInput); setPipingServerUrl(serverEditInput); setEditingServerIdx(-1); setServerVer(v => v+1); } if (e.key === 'Escape') setEditingServerIdx(-1); }}
+                                  onKeyDown=${e => { if (e.key === 'Enter' && serverEditInput) { if (s === demoBaseUrl || s === altServerUrl) addPipingServer(serverEditInput); else updatePipingServer(s, serverEditInput); setPipingServerUrl(serverEditInput); setEditingServerIdx(-1); setServerVer(v => v+1); } if (e.key === 'Escape') setEditingServerIdx(-1); }}
                                   onBlur=${() => setEditingServerIdx(-1)}
                                   class="flex-1 bg-transparent border border-gray-600 rounded px-1.5 py-0.5 text-white outline-none" />
                               ` : html`
                                 <button type="button" onClick=${() => { setPipingServerUrl(s); setServerDropdownOpen(false); }}
                                   class="flex-1 text-left truncate py-0.5 ${s === pipingServerUrl ? 'text-amber-400' : 'text-gray-300'}">${s}</button>
-                                ${s !== demoBaseUrl && html`
+                                ${s !== demoBaseUrl && s !== altServerUrl && html`
                                   <button type="button" onClick=${() => { setServerEditInput(s); setEditingServerIdx(i); }}
                                     class="text-gray-600 hover:text-gray-300 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Edit">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
