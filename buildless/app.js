@@ -377,6 +377,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
   const fitRef   = useRef(null);
   const termApi  = useRef(null);
   const wrapperRef = useRef(null);
+  const mcRef = useRef(null);
   const [connState, setConnState] = useState('connecting');
 
   // Fit/focus terminal when this tab becomes active
@@ -406,28 +407,31 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
   }, [connState]);
 
   useEffect(() => {
-    let localCancelled = false;
+    // xterm globals injected by CDN scripts
+    const { Terminal } = window;
+    const { FitAddon }   = window.FitAddon;
 
-    (async () => {
-      // xterm globals injected by CDN scripts
-      const { Terminal } = window;
-      const { FitAddon }   = window.FitAddon;
+    const term     = new Terminal({ cursorBlink: true, scrollbar: { showScrollbar: false } });
+    const fitAddon = new FitAddon();
 
-      const term     = new Terminal({ cursorBlink: true, scrollbar: { showScrollbar: false } });
-      const fitAddon = new FitAddon();
-      const mc       = new MessageChannel();
+    term.loadAddon(fitAddon);
+    term.open(termRef.current);
 
-      term.loadAddon(fitAddon);
-      term.open(termRef.current);
+    const fit = () => {
+      const dims = fitAddon.proposeDimensions();
+      if (!dims) return;
+      mcRef.current?.port1.postMessage({ type: 'resize', cols: dims.cols, rows: dims.rows });
+      fitAddon.fit();
+    };
+    fitRef.current = fit;
+    termApi.current = term;
 
-      const fit = () => {
-        const dims = fitAddon.proposeDimensions();
-        if (!dims) return;
-        mc.port1.postMessage({ type: 'resize', cols: dims.cols, rows: dims.rows });
-        fitAddon.fit();
-      };
-      fitRef.current = fit;
-      termApi.current = term;
+    const doConnect = async () => {
+      let localCancelled = false;
+      let pwTried = false;
+      let kiTried = false;
+      const mc = new MessageChannel();
+      mcRef.current = mc;
 
       // WebSocketStream transport
       let transport;
@@ -437,12 +441,17 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         console.error('WebSocket connection failed', e);
         showSnackbar({ message: 'WebSocket connection failed: ' + (e.message || e) });
         localCancelled = true;
-        onEnd();
+        onEnd?.();
+        if (!term.isDisposed) {
+          term.write("\r\n\r\n\x1b[90mWebSocket connection failed. Press any key to retry...\x1b[0m");
+          await new Promise(resolve => { const d = term.onKey(() => { d.dispose(); resolve(); }); });
+        }
+        doConnect();
         return;
       }
 
       const termReadable = new ReadableStream({ start(ctrl) { term.onData(d => ctrl.enqueue(d)); } });
-      window.addEventListener('beforeunload', () => mc.port1.postMessage({ type: 'disconnect' }));
+      window.addEventListener('beforeunload', () => mcRef.current?.port1.postMessage({ type: 'disconnect' }));
 
       // Prepare auth key sets
       const storedKeys  = getStoredKeys().filter(s => s.enabled);
@@ -451,9 +460,6 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         privateKey: s.privateKey,
         encrypted:  await workerIsEncrypted(s.privateKey),
       })))).sort((a, b) => (a.encrypted ? 1 : 0) - (b.encrypted ? 1 : 0));
-
-      let pwTried = false;
-      let kiTried = false;
 
       try {
         const remote    = await getAliveWorker();
@@ -558,8 +564,15 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         else { console.error('SSH error', e); showSnackbar({ message: `Connection closed: ${e.message || e}`, icon: '!' }); }
       } finally {
         onEnd?.();
+        term.write("\r\n\r\n\x1b[90mConnection closed. Press any key to reconnect...\x1b[0m");
+        await new Promise(resolve => {
+          const disposable = term.onKey(() => { disposable.dispose(); resolve(); });
+        });
+        term.write("\r\n\x1b[90mReconnecting...\x1b[0m\n");
       }
-    })();
+      doConnect();
+    };
+    doConnect();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return html`
