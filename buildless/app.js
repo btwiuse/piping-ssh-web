@@ -234,21 +234,22 @@ async function checkSupportsRequestStreams() {
 let _promptResolve = null;
 let _setPromptState = null;
 
-function showPrompt({ title, message = '', showsInput = true, inputType = 'text', placeholder = '', width = '24rem' }) {
+function showPrompt({ title, message = '', showsInput = true, inputType = 'text', placeholder = '', width = '24rem', saveable = false }) {
   return new Promise(resolve => {
     _promptResolve = resolve;
-    _setPromptState?.({ shows: true, title, message, showsInput, inputType, placeholder, width });
+    _setPromptState?.({ shows: true, title, message, showsInput, inputType, placeholder, width, saveable });
   });
 }
 
 function GlobalPrompt() {
-  const [st, setSt] = useState({ shows: false, title: '', message: '', showsInput: true, inputType: 'text', placeholder: '', width: '24rem' });
+  const [st, setSt] = useState({ shows: false, title: '', message: '', showsInput: true, inputType: 'text', placeholder: '', width: '24rem', saveable: false });
   const [text, setText] = useState('');
   const [showPw, setShowPw] = useState(false);
+  const [saveChecked, setSaveChecked] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    _setPromptState = s => { setSt(s); setText(''); setShowPw(false); };
+    _setPromptState = s => { setSt(s); setText(''); setShowPw(false); setSaveChecked(false); };
     return () => { _setPromptState = null; };
   }, []);
 
@@ -259,7 +260,11 @@ function GlobalPrompt() {
   if (!st.shows) return null;
 
   const cancel = () => { setSt(s => ({ ...s, shows: false })); _promptResolve?.(undefined); };
-  const ok     = () => { setSt(s => ({ ...s, shows: false })); _promptResolve?.(st.showsInput ? text : ''); };
+  const ok     = () => {
+    setSt(s => ({ ...s, shows: false }));
+    if (!st.showsInput) { _promptResolve?.(''); return; }
+    _promptResolve?.(st.saveable ? { value: text, save: saveChecked } : text);
+  };
   const isPw   = st.inputType === 'password';
 
   return html`
@@ -288,6 +293,12 @@ function GlobalPrompt() {
               </button>
             `}
           </div>
+          ${st.saveable && html`
+            <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 hover:text-gray-400 transition-colors">
+              <input type="checkbox" checked=${saveChecked} onChange=${e => setSaveChecked(e.target.checked)} class="accent-amber-500" />
+              Save password
+            </label>
+          `}
         `}
         <div class="flex justify-end gap-3 mt-4">
           <button type="button" onClick=${cancel}
@@ -361,7 +372,7 @@ function CopyButton({ text }) {
 
 // ─── PipingSsh (terminal view) ────────────────────────────────────────────────
 
-function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd, onConnected, isActive = true }) {
+function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForwarding, onEnd, onConnected, onSavePassword, isActive = true }) {
   const termRef  = useRef(null);
   const fitRef   = useRef(null);
   const termApi  = useRef(null);
@@ -460,17 +471,18 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
             termWrite(data) { term.write(data); },
 
             async onPasswordAuth() {
-              if (!pwTried && defaultSshPassword !== undefined) { pwTried = true; return defaultSshPassword; }
+              if (!pwTried && defaultSshPassword) { pwTried = true; return defaultSshPassword; }
               const msg = pwTried ? 'try again.' : '';
-              const pw  = await showPrompt({ title: 'Password', message: msg, inputType: 'password' });
+              const pw  = await showPrompt({ title: 'Password', message: msg, inputType: 'password', saveable: true });
               if (pw === undefined) { localCancelled = true; throw new Error('aborted'); }
               pwTried = true;
-              return pw;
+              if (pw.save) onSavePassword?.(pw.value);
+              return pw.value;
             },
 
             async onKeyboardInteractive(name, instruction, questions, echos) {
               // Some servers use keyboard-interactive as a password auth replacement
-              if (!kiTried && defaultSshPassword !== undefined && questions.length === 1 && !echos[0]) {
+              if (!kiTried && defaultSshPassword && questions.length === 1 && !echos[0]) {
                 kiTried = true;
                 return [defaultSshPassword];
               }
@@ -1206,7 +1218,7 @@ function App() {
       hostname,
       port,
       username,
-      password: password ?? '',
+      password: password || getStoredHosts().find(h => h.hostname === hostname && h.port === port && h.username === username)?.password || '',
       agentForwarding: agentForwarding ?? false,
       pipingFullUrl: fullUrl,
       status: 'connecting',
@@ -1241,7 +1253,8 @@ function App() {
       // Save to host presets
       const hosts = getStoredHosts();
       const idx   = hosts.findIndex(h => h.hostname === sshHost && h.port === sshPort && h.username === username);
-      const entry = { name: `${username}@${sshHost}`, hostname: sshHost, port: sshPort, username, password: sshPassword, addedAtMillis: Date.now() };
+      const existingPw = idx !== -1 ? hosts[idx].password : '';
+      const entry = { name: `${username}@${sshHost}`, hostname: sshHost, port: sshPort, username, password: sshPassword || existingPw, addedAtMillis: Date.now() };
       if (idx !== -1) { hosts[idx] = entry; }
       else            { hosts.push(entry); }
       persistHosts(hosts);
@@ -1339,6 +1352,11 @@ function App() {
               agentForwarding=${c.agentForwarding}
               onConnected=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
               onEnd=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
+              onSavePassword=${pw => {
+                const hosts = getStoredHosts();
+                const idx = hosts.findIndex(h => h.hostname === c.hostname && h.port === c.port && h.username === c.username);
+                if (idx !== -1) { hosts[idx] = {...hosts[idx], password: pw}; persistHosts(hosts); }
+              }}
             />
           </div>
         `)}
