@@ -442,11 +442,14 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
     // xterm globals injected by CDN scripts
     const { Terminal } = window;
     const { FitAddon }   = window.FitAddon;
+    const { ClipboardAddon } = window.ClipboardAddon;
 
     const term     = new Terminal({ cursorBlink: true, scrollbar: { showScrollbar: false } });
     const fitAddon = new FitAddon();
+    const clipboardAddon = new ClipboardAddon();
 
     term.loadAddon(fitAddon);
+    term.loadAddon(clipboardAddon);
     term.open(termRef.current);
 
     const fit = () => {
