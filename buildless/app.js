@@ -21,6 +21,7 @@ const html = htm.bind(h);
 const promptReconnect = (term, msg) => {
   if (!term || term.isDisposed) return Promise.resolve();
   term.write("\r\n\r\n\x1b[90m" + msg + "\x1b[0m");
+  term.focus();
   return new Promise(resolve => { const d = term.onKey(() => { d.dispose(); resolve(); }); })
     .then(() => { term.reset(); });
 };
@@ -597,9 +598,9 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return html`
-    <div ref=${wrapperRef} style=${{ flex: 1, overflow: 'hidden' }}>
+    <div ref=${wrapperRef} style=${{ flex: 1, overflow: 'hidden', position: 'relative' }}>
       ${connState === 'connecting' && html`
-        <div class="flex flex-col items-center justify-center gap-6 pt-16">
+        <div class="absolute inset-0 flex flex-col items-center justify-center gap-6">
           <div class="relative w-36 h-36">
             <div class="absolute inset-0 rounded-full border-2 border-gray-700"></div>
             <div class="absolute inset-0 rounded-full border-2 border-t-amber-500 animate-spin"></div>
