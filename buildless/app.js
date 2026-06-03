@@ -448,7 +448,6 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
           if (!t || t.isDisposed) return;
           t.write("\r\n\r\n\x1b[90mCancelled. Press any key to reconnect...\x1b[0m");
           await new Promise(resolve => { const d = t.onKey(() => { d.dispose(); resolve(); }); });
-          t.write("\r\n\x1b[90mReconnecting...\x1b[0m\n");
           setConnState('connecting');
           doConnect();
         }, 0);
