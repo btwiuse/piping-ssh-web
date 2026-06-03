@@ -1413,7 +1413,7 @@ function App() {
       <!-- Main content -->
       <main class="flex-1 flex flex-col">
         ${connections.map(c => html`
-          <div style=${{ display: c.id === activeConnectionId ? 'flex' : 'none', flex: 1 }}>
+          <div key=${c.id} style=${{ display: c.id === activeConnectionId ? 'flex' : 'none', flex: 1 }}>
             <${PipingSsh} key=${c.id}
               isActive=${c.id === activeConnectionId}
               pipingServerUrl=${c.pipingFullUrl}
