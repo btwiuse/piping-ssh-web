@@ -1359,7 +1359,7 @@ function App() {
 
         <!-- Connection tabs -->
         ${connections.length > 0 && html`
-          <div class="flex-1 flex items-center gap-0.5 overflow-x-auto min-w-0">
+          <div class="flex-1 flex items-center gap-0.5 overflow-x-auto min-w-0" style=${{ scrollbarWidth: 'none' }}>
             ${connections.map(c => {
               const statusEmoji = c.status === 'connected' ? ICON.connected : c.status === 'connecting' ? ICON.connecting : ICON.disconnected;
               return html`
