@@ -1066,7 +1066,6 @@ function loadSaved(key, fallback) {
 
 function saveTabs(connections) {
   const toSave = connections
-    .filter(c => c.status !== 'finished')
     .map(({ hostname, port, username, password, agentForwarding, pipingFullUrl, name }) => ({
       hostname, port, username, password, agentForwarding, pipingFullUrl, name
     }));
@@ -1123,13 +1122,6 @@ function App() {
     try { sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(state)); } catch {}
   }, [pipingServerUrl, sshHost, sshPort, username, sshPassword, emptySshPw, inclPwInUrl, autoConnect]);
 
-  // Save tabs on beforeunload (connRef always has latest due to eager sync)
-  useEffect(() => {
-    const handle = () => saveTabs(connectionsRef.current);
-    window.addEventListener('beforeunload', handle);
-    return () => window.removeEventListener('beforeunload', handle);
-  }, []);
-
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
 
@@ -1173,6 +1165,7 @@ function App() {
     };
     connectionsRef.current = [...connectionsRef.current, entry];
     setConnections(connectionsRef.current);
+    saveTabs(connectionsRef.current);
     if (activate) {
       setActiveConnectionId(id);
       location.hash = `#${id}`;
@@ -1183,6 +1176,7 @@ function App() {
     const next = connectionsRef.current.filter(c => c.id !== connId);
     connectionsRef.current = next;
     setConnections(next);
+    saveTabs(connectionsRef.current);
     if (activeConnectionId === connId) {
       setActiveConnectionId(next.length > 0 ? next[next.length-1].id : null);
     }
@@ -1292,8 +1286,8 @@ function App() {
               username=${c.username}
               defaultSshPassword=${c.password}
               agentForwarding=${c.agentForwarding}
-              onConnected=${() => setConnections(prev => { const next = prev.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc); connectionsRef.current = next; return next; })}
-              onEnd=${() => setConnections(prev => { const next = prev.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc); connectionsRef.current = next; return next; })}
+              onConnected=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'connected'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
+              onEnd=${() => { const next = connectionsRef.current.map(cc => cc.id === c.id ? {...cc, status: 'finished'} : cc); connectionsRef.current = next; setConnections(next); saveTabs(next); }}
             />
           </div>
         `)}
