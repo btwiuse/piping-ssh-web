@@ -480,12 +480,11 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         privateKey: s.privateKey,
         encrypted:  await workerIsEncrypted(s.privateKey),
       })))).sort((a, b) => (a.encrypted ? 1 : 0) - (b.encrypted ? 1 : 0));
+      if (cancel) return;
 
       try {
         const remote    = await getAliveWorker();
         const transfers = [transport.readable, transport.writable, termReadable, mc.port2];
-
-        if (cancel) return;
         await remote.doSsh(
           Comlink.transfer({
             transport, termReadable, agentForwarding,
