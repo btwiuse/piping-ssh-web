@@ -365,6 +365,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
   const termRef  = useRef(null);
   const fitRef   = useRef(null);
   const termApi  = useRef(null);
+  const wrapperRef = useRef(null);
   const [connState, setConnState] = useState('connecting');
 
   // Fit/focus terminal when this tab becomes active
@@ -377,6 +378,21 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
     });
     return () => cancelAnimationFrame(raf1);
   }, [isActive, connState]);
+
+  // ResizeObserver for reliable terminal resize on any container size change
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || connState !== 'connected') return;
+    let rafId;
+    const ro = new ResizeObserver(() => {
+      rafId = requestAnimationFrame(() => fitRef.current?.());
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, [connState]);
 
   useEffect(() => {
     let localCancelled = false;
@@ -401,7 +417,6 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
       };
       fitRef.current = fit;
       termApi.current = term;
-      window.addEventListener('resize', fit);
 
       // WebSocketStream transport
       let transport;
@@ -530,14 +545,13 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         if (localCancelled) { showSnackbar({ message: 'Canceled' }); }
         else { console.error('SSH error', e); showSnackbar({ message: `Connection closed: ${e.message || e}`, icon: '!' }); }
       } finally {
-        window.removeEventListener('resize', fit);
         onEnd?.();
       }
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return html`
-    <div style=${{ flex: 1 }}>
+    <div ref=${wrapperRef} style=${{ flex: 1, overflow: 'hidden' }}>
       ${connState === 'connecting' && html`
         <div class="flex flex-col items-center justify-center gap-6 pt-16">
           <div class="relative w-36 h-36">
@@ -548,7 +562,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         </div>
       `}
       <div ref=${termRef}
-        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 28px)' }}
+        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 28px)', overflow: 'hidden' }}
       ></div>
     </div>
   `;
@@ -1041,12 +1055,26 @@ function Dialog({ title, open, onClose, children, wide = false }) {
 
 const demoBaseUrl = 'https://websocket-tcp-proxy.navigaid.workers.dev/';
 const FORM_STORAGE_KEY = 'piping-ssh-form';
+const TABS_STORAGE_KEY = 'piping-ssh-tabs';
 
 function loadSaved(key, fallback) {
   try {
     const saved = JSON.parse(sessionStorage.getItem(FORM_STORAGE_KEY) || '{}');
     return saved[key] !== undefined ? saved[key] : fallback;
   } catch { return fallback; }
+}
+
+function saveTabs(connections) {
+  const toSave = connections
+    .filter(c => c.status !== 'finished')
+    .map(({ hostname, port, username, password, agentForwarding, pipingFullUrl, name }) => ({
+      hostname, port, username, password, agentForwarding, pipingFullUrl, name
+    }));
+  try { localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(toSave)); } catch {}
+}
+
+function loadTabs() {
+  try { return JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) || '[]'); } catch { return []; }
 }
 
 function App() {
@@ -1069,6 +1097,8 @@ function App() {
   const connIdCounter = useRef(0);
   const connectionsRef = useRef(connections);
   connectionsRef.current = connections;
+  const restoredRef = useRef(false);
+  const hasRestored = useRef(false);
 
   // Sync route with hash changes
   useEffect(() => {
@@ -1094,6 +1124,12 @@ function App() {
     try { sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(state)); } catch {}
   }, [pipingServerUrl, sshHost, sshPort, username, sshPassword, emptySshPw, inclPwInUrl, autoConnect]);
 
+  // Persist tabs to localStorage (skip initial empty save before restore)
+  useEffect(() => {
+    if (!hasRestored.current) return;
+    saveTabs(connections);
+  }, [connections]);
+
   // Effective ssh password
   const effectiveSshPassword = (sshPassword === '' && !emptySshPw) ? undefined : sshPassword;
 
@@ -1105,14 +1141,25 @@ function App() {
     if (fragmentParams.autoConnect()) startConnection({ hostname: sshHost, port: sshPort, username, password: effectiveSshPassword });
   }, []); // eslint-disable-line
 
-  function startConnection({ hostname, port, username, password, agentForwarding }) {
-    let fullUrl = '';
-    try {
-      const url = new URL(pipingServerUrl);
-      url.searchParams.set('hostname', hostname);
-      url.searchParams.set('port', port);
-      fullUrl = url.href;
-    } catch {}
+  // Restore tabs on mount
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const saved = loadTabs();
+    saved.forEach(s => startConnection(s, { activate: false }));
+    hasRestored.current = true;
+  }, []); // eslint-disable-line
+
+  function startConnection({ hostname, port, username, password, agentForwarding, pipingFullUrl }, { activate = true } = {}) {
+    let fullUrl = pipingFullUrl;
+    if (!fullUrl) {
+      try {
+        const url = new URL(pipingServerUrl);
+        url.searchParams.set('hostname', hostname);
+        url.searchParams.set('port', port);
+        fullUrl = url.href;
+      } catch {}
+    }
     const id = ++connIdCounter.current;
     setConnections(prev => [...prev, {
       id,
@@ -1125,8 +1172,10 @@ function App() {
       status: 'connecting',
       name: `${username}@${hostname}`,
     }]);
-    setActiveConnectionId(id);
-    location.hash = `#${id}`;
+    if (activate) {
+      setActiveConnectionId(id);
+      location.hash = `#${id}`;
+    }
   }
 
   function closeConnection(connId) {
