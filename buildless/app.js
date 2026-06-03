@@ -1056,6 +1056,7 @@ function Dialog({ title, open, onClose, children, wide = false }) {
 const demoBaseUrl = 'https://websocket-tcp-proxy.navigaid.workers.dev/';
 const FORM_STORAGE_KEY = 'piping-ssh-form';
 const TABS_STORAGE_KEY = 'piping-ssh-tabs';
+const PIPING_SERVERS_KEY = 'piping-ssh-servers';
 
 function loadSaved(key, fallback) {
   try {
@@ -1076,6 +1077,33 @@ function loadTabs() {
   try { return JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) || '[]'); } catch { return []; }
 }
 
+function getStoredPipingServers() {
+  try { return JSON.parse(localStorage.getItem(PIPING_SERVERS_KEY) || '[]'); } catch { return []; }
+}
+
+function addPipingServer(url) {
+  if (!url) return;
+  const servers = getStoredPipingServers();
+  if (servers.includes(url)) return;
+  servers.push(url);
+  try { localStorage.setItem(PIPING_SERVERS_KEY, JSON.stringify(servers)); } catch {}
+}
+
+function removePipingServer(url) {
+  const servers = getStoredPipingServers().filter(s => s !== url);
+  try { localStorage.setItem(PIPING_SERVERS_KEY, JSON.stringify(servers)); } catch {}
+}
+
+function updatePipingServer(oldUrl, newUrl) {
+  if (!newUrl || oldUrl === newUrl) return;
+  const servers = getStoredPipingServers();
+  const idx = servers.indexOf(oldUrl);
+  if (idx === -1) return;
+  if (servers.includes(newUrl)) { removePipingServer(oldUrl); return; }
+  servers[idx] = newUrl;
+  try { localStorage.setItem(PIPING_SERVERS_KEY, JSON.stringify(servers)); } catch {}
+}
+
 function App() {
   const [pipingServerUrl,   setPipingServerUrl]   = useState(loadSaved('pipingServerUrl', fragmentParams.pipingServerUrl() ?? demoBaseUrl));
   const [sshHost,           setSshHost]           = useState(loadSaved('sshHost', fragmentParams.sshHost() ?? 'terminal.shop'));
@@ -1089,6 +1117,10 @@ function App() {
   const [showMore,          setShowMore]          = useState(false);
   const [supportsStreams,   setSupportsStreams]   = useState(true);
   const [route,             setRoute]             = useState(location.hash || '#');
+  const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
+  const [editingServerIdx, setEditingServerIdx] = useState(-1);
+  const [serverEditInput, setServerEditInput] = useState('');
+  const [serverVer, setServerVer] = useState(0);
   const [newKeyOpen,        setNewKeyOpen]        = useState(false);
   const [genKeyOpen,        setGenKeyOpen]        = useState(false);
   const [connections,       setConnections]       = useState([]);
@@ -1097,6 +1129,7 @@ function App() {
   const connectionsRef = useRef(connections);
   connectionsRef.current = connections;
   const restoredRef = useRef(false);
+  const serverDropdownRef = useRef(null);
 
   // Sync route with hash changes
   useEffect(() => {
@@ -1140,6 +1173,13 @@ function App() {
     const saved = loadTabs();
     saved.forEach(s => startConnection(s, { activate: false }));
   }, []); // eslint-disable-line
+
+  // Close server dropdown on click outside
+  useEffect(() => {
+    const handler = e => { if (serverDropdownRef.current && !serverDropdownRef.current.contains(e.target)) { setServerDropdownOpen(false); setEditingServerIdx(-1); } };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   function startConnection({ hostname, port, username, password, agentForwarding, pipingFullUrl }, { activate = true } = {}) {
     let fullUrl = pipingFullUrl;
@@ -1185,8 +1225,10 @@ function App() {
   function connect(host) {
     if (host) {
       startConnection(host);
+      addPipingServer(host.pipingServerUrl || pipingServerUrl);
     } else {
       startConnection({ hostname: sshHost, port: sshPort, username, password: effectiveSshPassword, agentForwarding: false });
+      addPipingServer(pipingServerUrl);
       // Save to host presets
       const hosts = getStoredHosts();
       const idx   = hosts.findIndex(h => h.hostname === sshHost && h.port === sshPort && h.username === username);
@@ -1372,15 +1414,61 @@ function App() {
                   <div class="space-y-4 pt-1">
 
                     <!-- Piping Server URL -->
-                    <div>
+                    <div ref=${serverDropdownRef} class="relative">
                       <label class="block text-xs text-gray-600 mb-1.5 tracking-wide uppercase">Piping Server</label>
-                      <input list="piping-servers" value=${pipingServerUrl}
-                        onInput=${e => setPipingServerUrl(e.target.value)}
-                        required disabled=${!supportsStreams}
-                        class=${inputClass} />
-                      <datalist id="piping-servers">
-                        <option value=${demoBaseUrl}/>
-                      </datalist>
+                      <div class="flex gap-0">
+                        <input value=${pipingServerUrl}
+                          onInput=${e => setPipingServerUrl(e.target.value)}
+                          onFocus=${() => setServerDropdownOpen(true)}
+                          required disabled=${!supportsStreams}
+                          class="${inputClass} rounded-r-none" />
+                        <button type="button" onClick=${() => setServerDropdownOpen(p => !p)}
+                          class="px-2 border border-l-0 border-gray-800 rounded-r-sm bg-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700 transition-colors ${!supportsStreams ? 'opacity-50 cursor-not-allowed' : ''}">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                      </div>
+                      ${serverDropdownOpen && html`
+                        <div class="absolute left-0 right-0 top-full mt-1 z-50 bg-gray-900 border border-gray-700 rounded-sm shadow-xl max-h-48 overflow-y-auto">
+                          ${[demoBaseUrl, ...getStoredPipingServers().filter(s => s !== demoBaseUrl)].map((s, i) => html`
+                            <div class="flex items-center gap-1 px-2 py-1.5 text-xs border-b border-gray-800 last:border-b-0 hover:bg-gray-800/50 group ${s === pipingServerUrl ? 'bg-gray-800' : ''}">
+                              ${editingServerIdx === i ? html`
+                                <input value=${serverEditInput} autofocus
+                                  onInput=${e => setServerEditInput(e.target.value)}
+                                  onKeyDown=${e => { if (e.key === 'Enter' && serverEditInput) { if (s === demoBaseUrl) addPipingServer(serverEditInput); else updatePipingServer(s, serverEditInput); setPipingServerUrl(serverEditInput); setEditingServerIdx(-1); setServerVer(v => v+1); } if (e.key === 'Escape') setEditingServerIdx(-1); }}
+                                  onBlur=${() => setEditingServerIdx(-1)}
+                                  class="flex-1 bg-transparent border border-gray-600 rounded px-1.5 py-0.5 text-white outline-none" />
+                              ` : html`
+                                <button type="button" onClick=${() => { setPipingServerUrl(s); setServerDropdownOpen(false); }}
+                                  class="flex-1 text-left truncate py-0.5 ${s === pipingServerUrl ? 'text-amber-400' : 'text-gray-300'}">${s}</button>
+                                ${s !== demoBaseUrl && html`
+                                  <button type="button" onClick=${() => { setServerEditInput(s); setEditingServerIdx(i); }}
+                                    class="text-gray-600 hover:text-gray-300 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Edit">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                  </button>
+                                  <button type="button" onClick=${() => { removePipingServer(s); if (pipingServerUrl === s) setPipingServerUrl(demoBaseUrl); setServerVer(v => v+1); }}
+                                    class="text-gray-600 hover:text-red-400 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="Delete">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                  </button>
+                                `}
+                              `}
+                            </div>
+                          `)}
+                          ${editingServerIdx === -2 ? html`
+                            <div class="px-2 py-1.5 border-t border-gray-700">
+                              <input value=${serverEditInput} autofocus placeholder="https://..."
+                                onInput=${e => setServerEditInput(e.target.value)}
+                                onKeyDown=${e => { if (e.key === 'Enter' && serverEditInput) { addPipingServer(serverEditInput); setPipingServerUrl(serverEditInput); setEditingServerIdx(-1); setServerDropdownOpen(false); setServerVer(v => v+1); } if (e.key === 'Escape') { setEditingServerIdx(-1); } }}
+                                class="w-full bg-transparent border border-gray-600 rounded px-1.5 py-1 text-xs text-white outline-none placeholder-gray-600" />
+                            </div>
+                          ` : html`
+                            <button type="button" onClick=${() => { setServerEditInput(''); setEditingServerIdx(-2); }}
+                              class="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-800/50 border-t border-gray-800">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                              Add server
+                            </button>
+                          `}
+                        </div>
+                      `}
                     </div>
 
                     <!-- SSH password -->
