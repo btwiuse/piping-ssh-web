@@ -380,6 +380,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
   const termApi  = useRef(null);
   const wrapperRef = useRef(null);
   const mcRef = useRef(null);
+  const abortRef = useRef(null);
   const [connState, setConnState] = useState('connecting');
 
   // Fit/focus terminal when this tab becomes active
@@ -436,10 +437,28 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
       mcRef.current = mc;
 
       // WebSocketStream transport
+      let cancel = false;
+      const wsStream = new WebSocketStream(pipingServerUrl);
+      abortRef.current = () => {
+        cancel = true;
+        wsStream.close();
+        setConnState('disconnected');
+        setTimeout(async () => {
+          const t = termApi.current;
+          if (!t || t.isDisposed) return;
+          t.write("\r\n\r\n\x1b[90mCancelled. Press any key to reconnect...\x1b[0m");
+          await new Promise(resolve => { const d = t.onKey(() => { d.dispose(); resolve(); }); });
+          t.write("\r\n\x1b[90mReconnecting...\x1b[0m\n");
+          setConnState('connecting');
+          doConnect();
+        }, 0);
+      };
       let transport;
       try {
-        transport = await new WebSocketStream(pipingServerUrl).opened;
+        transport = await wsStream.opened;
+        if (cancel) return;
       } catch (e) {
+        if (cancel) return;
         console.error('WebSocket connection failed', e);
         showSnackbar({ message: 'WebSocket connection failed: ' + (e.message || e) });
         localCancelled = true;
@@ -467,6 +486,7 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
         const remote    = await getAliveWorker();
         const transfers = [transport.readable, transport.writable, termReadable, mc.port2];
 
+        if (cancel) return;
         await remote.doSsh(
           Comlink.transfer({
             transport, termReadable, agentForwarding,
@@ -586,10 +606,12 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
             <div class="absolute inset-0 rounded-full border-2 border-t-amber-500 animate-spin"></div>
           </div>
           <p class="text-gray-400">Connecting...</p>
+          <button type="button" onClick=${() => abortRef.current?.()}
+            class="px-4 py-1.5 text-xs text-gray-500 border border-gray-800 hover:border-amber-600/40 hover:text-amber-500 rounded-sm transition-colors">Cancel</button>
         </div>
       `}
       <div ref=${termRef}
-        style=${{ display: connState === 'connected' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 28px)', overflow: 'hidden' }}
+        style=${{ display: connState !== 'connecting' ? 'block' : 'none', width: '100%', height: 'calc(100vh - 28px)', overflow: 'hidden' }}
       ></div>
     </div>
   `;
