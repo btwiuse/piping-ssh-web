@@ -1,6 +1,6 @@
-# Piping SSH — Buildless Frontend
+# GearSSH — Buildless Frontend
 
-A zero-build version of the Piping SSH frontend. Uses:
+A zero-build version of the GearSSH frontend. Uses:
 
 - **React 19** via [esm.sh](https://esm.sh) (ES modules, no bundler)
 - **htm** — JSX-like tagged template literals, no compilation step

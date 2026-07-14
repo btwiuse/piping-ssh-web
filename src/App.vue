@@ -6,7 +6,7 @@
           <v-icon :icon="mdiConsoleLine"/>
         </v-avatar>
         <a href="" class="me-4 font-weight-bold" style="color: inherit; text-decoration: none">
-          Piping SSH
+          GearSSH
         </a>
 
         <v-spacer></v-spacer>

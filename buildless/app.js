@@ -1,5 +1,5 @@
 // buildless/app.js
-// Piping SSH — buildless React 19 frontend.
+// GearSSH — buildless React 19 frontend.
 // Uses htm for JSX-like templates and Comlink for the WASM worker.
 
 import { createElement as h, useState, useEffect, useRef, Fragment } from 'react';
@@ -1360,7 +1360,7 @@ function App() {
       <header class="flex-shrink-0 flex items-center px-3 py-1 gap-1 z-10 border-b border-gray-800/50">
         <a href="#" onClick=${e => { e.preventDefault(); setActiveConnectionId(null); window.scrollTo(0, 0); location.hash = ''; }} class="flex items-center gap-1 text-xs font-medium text-gray-200 no-underline mr-2 tracking-tight flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l4-4-4-4"/><path d="M12 19h8"/></svg>
-          Piping SSH
+          GearSSH
         </a>
 
         <!-- Connection tabs -->
