@@ -444,12 +444,16 @@ function PipingSsh({ pipingServerUrl, username, defaultSshPassword, agentForward
     const { FitAddon }   = window.FitAddon;
     const { ClipboardAddon } = window.ClipboardAddon;
 
+    const { CursorTrailAddon } = window.CursorTrailAddon;
+
     const term     = new Terminal({ cursorBlink: true, scrollbar: { showScrollbar: false } });
     const fitAddon = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
+    const cursorTrailAddon = new CursorTrailAddon();
 
     term.loadAddon(fitAddon);
     term.loadAddon(clipboardAddon);
+    term.loadAddon(cursorTrailAddon);
     term.open(termRef.current);
 
     const fit = () => {
